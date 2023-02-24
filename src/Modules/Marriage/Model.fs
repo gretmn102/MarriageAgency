@@ -6,7 +6,7 @@ open MongoDB.Bson
 open Types
 open Db
 
-module Marriage =
+module MarriedCouples =
     type MainData =
         {
             Spouse: UserId

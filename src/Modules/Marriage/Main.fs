@@ -9,7 +9,7 @@ open Model
 
 type State =
     {
-        MarriedCouples: Marriage.GuildData
+        MarriedCouples: MarriedCouples.GuildData
     }
 
 type Action =
@@ -38,7 +38,7 @@ let reduce (msg: Msg) (state: State): State =
 
             | Top.MarriedCouplesCm req ->
                 let req, newMarriedCouples =
-                    Marriage.interp e.Interaction.Guild.Id req state.MarriedCouples
+                    MarriedCouples.interp e.Interaction.Guild.Id req state.MarriedCouples
 
                 let state =
                     { state with
@@ -62,7 +62,7 @@ let reduce (msg: Msg) (state: State): State =
 let create db =
     let m =
         let init: State = {
-            MarriedCouples = Marriage.GuildData.init "marriedCouples" db
+            MarriedCouples = MarriedCouples.GuildData.init "marriedCouples" db
         }
 
         MailboxProcessor.Start (fun mail ->
