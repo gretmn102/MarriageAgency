@@ -12,33 +12,191 @@ type State =
         MarriedCouples: MarriedCouples.GuildData
     }
 
+type Pair =
+    {
+        SourceUserId: UserId
+        TargetUserId: UserId
+    }
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<RequireQualifiedAccess>]
+module Pair =
+    let create sourceUserId targetUserId =
+        {
+            SourceUserId = sourceUserId
+            TargetUserId = targetUserId
+        }
+
+    module Printer =
+        open FsharpMyExtension.ShowList
+
+        let showT (p: Pair) =
+            shows p.SourceUserId << nl
+            << shows p.TargetUserId
+
+    module Parser =
+        open FParsec
+
+        let parse<'UserState> : Parser<_, 'UserState> =
+            pipe2
+                (puint64 .>> newline)
+                puint64
+                create
+
 type Action =
     | GetMarried of UserId
     | Divorce
     | Status of UserId option
 
+    | ConfirmMerry of Pair
+    | CancelMerry of Pair
+
+module Views =
+    open Extensions.Interaction
+
+    type Handler<'Data> = 'Data -> Action
+    type DataParser<'Data> = FParsec.Primitives.Parser<'Data, unit>
+    type DataParserHandler<'Data> = DataParser<'Data> * Handler<'Data>
+
+    module MerryResultView =
+        let view str =
+            let b = Entities.DiscordMessageBuilder()
+            b.Content <- str
+            b
+
+    module MerryConformationView =
+        let viewId = "merryConformationId"
+
+        type ComponentId =
+            | ConfirmButton = 0
+            | CancelButton = 1
+
+        type Handler =
+            | ConfirmButtonHandler of DataParserHandler<Pair>
+            | CancelButtonHandler of DataParserHandler<Pair>
+
+        let handlers: Map<ComponentId, Handler> =
+            [
+                ComponentId.ConfirmButton, ConfirmButtonHandler (Pair.Parser.parse, fun data ->
+                    ConfirmMerry data
+                )
+                ComponentId.CancelButton, CancelButtonHandler (Pair.Parser.parse, fun data ->
+                    CancelMerry data
+                )
+            ]
+            |> Map.ofList
+
+        let conformationView (authorId: UserId) (targetUserId: UserId) =
+            let b = Entities.DiscordMessageBuilder()
+
+            b.Content <-
+                sprintf "<@%d>, тут это, носок <@%d> хочет с тобой породниться. Соглашаешься?"
+                    targetUserId
+                    authorId
+
+            let сonfirmButton =
+                let id =
+                    ComponentState.create
+                        viewId
+                        ComponentId.ConfirmButton
+                        (Pair.create authorId targetUserId)
+                Entities.DiscordButtonComponent(
+                    ButtonStyle.Primary,
+                    ComponentState.serialize Pair.Printer.showT id,
+                    "Согласиться!"
+                )
+
+            let cancelButton =
+                let id =
+                    ComponentState.create
+                        viewId
+                        ComponentId.CancelButton
+                        (Pair.create authorId targetUserId)
+                Entities.DiscordButtonComponent(
+                    ButtonStyle.Danger,
+                    ComponentState.serialize Pair.Printer.showT id,
+                    "Отказать!"
+                )
+
+            b.AddComponents [|
+                сonfirmButton :> Entities.DiscordComponent
+                cancelButton :> Entities.DiscordComponent
+            |] |> ignore
+
+            b
+
 type Msg =
     | RequestSlashCommand of EventArgs.InteractionCreateEventArgs * Action
+    | RequestInteraction of DiscordClient * EventArgs.ComponentInteractionCreateEventArgs * Action
 
-let reduce (msg: Msg) (state: State): State =
-    match msg with
-    | RequestSlashCommand(e, act) ->
+module FParsecExt =
+    open FParsec
+
+    let runResult p str =
+        match run p str with
+        | Success(res, _, pos) -> Result.Ok (res, pos)
+        | Failure(errMsg, _, _) -> Result.Error errMsg
+
+    let runResultAt p startIndex str =
+        match runParserOnSubstring p () "" str startIndex (str.Length - startIndex) with
+        | Success(data, _, pos) ->
+            Result.Ok (data, pos)
+        | Failure(errMsg, _, _) ->
+            Result.Error errMsg
+
+module ResultExt =
+    let toOption = function
+        | Ok x -> Some x
+        | Error _ -> None
+
+module Interaction =
+    module ComponentState =
+        module Parser =
+            open FParsec
+
+            open Extensions.Interaction
+            open Extensions.Interaction.ComponentState.Parser
+
+            type 'a Parser = Parser<'a, unit>
+
+            let inline parseHeaders< ^ComponentId when ^ComponentId: enum<int32>> : {| FormId: string; ComponentId: ^ComponentId |} Parser =
+                pipe2
+                    (pescapedString .>> newline)
+                    (pint32 .>> newline)
+                    (fun formId componentId ->
+                        {|
+                            FormId = formId
+                            ComponentId = (enum< ^ComponentId> componentId)
+                        |}
+                    )
+
+            let inline parse (str: string) =
+                FParsecExt.runResult pheader str
+                |> ResultExt.toOption
+                |> Option.map (fun (res, pos) ->
+                    FParsecExt.runResultAt parseHeaders (int pos.Index) str
+                    |> Result.map (fun (res, pos2) ->
+                        let parseData pdata =
+                            FParsecExt.runResultAt (pdata: 'Data Parser) (int (pos.Index + pos2.Index)) str
+                            |> Result.map (fun (data, pos) ->
+                                data
+                            )
+                        res, parseData
+                    )
+                )
+
+let rec reduce (msg: Msg) (state: State): State =
+    let interp guildId send cmd state =
         let rec interp cmd state =
             match cmd with
             | Top.Print(str, next) ->
-                let msg = Entities.DiscordMessageBuilder()
-                msg.Content <- str
-
-                let b = Entities.DiscordInteractionResponseBuilder(msg)
-                let typ =
-                    InteractionResponseType.ChannelMessageWithSource
-                awaiti <| e.Interaction.CreateResponseAsync (typ, b)
+                Views.MerryResultView.view str
+                |> send
 
                 interp (next ()) state
 
             | Top.MarriedCouplesCm req ->
                 let req, newMarriedCouples =
-                    MarriedCouples.interp e.Interaction.Guild.Id req state.MarriedCouples
+                    MarriedCouples.interp guildId req state.MarriedCouples
 
                 let state =
                     { state with
@@ -47,17 +205,122 @@ let reduce (msg: Msg) (state: State): State =
                 interp req state
             | Top.End -> state
 
+        interp cmd state
+
+    match msg with
+    | RequestSlashCommand(e, act) ->
         let user1Id = e.Interaction.User.Id
+        let guildId = e.Interaction.Guild.Id
+
+        let response (b: Entities.DiscordMessageBuilder) =
+            let b = Entities.DiscordInteractionResponseBuilder(b)
+            let typ =
+                InteractionResponseType.ChannelMessageWithSource
+            awaiti <| e.Interaction.CreateResponseAsync (typ, b)
+
+        let responseEphemeral (b: Entities.DiscordMessageBuilder) =
+            let b = Entities.DiscordInteractionResponseBuilder(b)
+            b.IsEphemeral <- true
+
+            let typ =
+                InteractionResponseType.ChannelMessageWithSource
+            awaiti <| e.Interaction.CreateResponseAsync (typ, b)
+
         match act with
         | GetMarried user2Id ->
-            interp (Top.merry user1Id user2Id) state
+            if user1Id = user2Id then
+                let b = Entities.DiscordMessageBuilder()
+                b.Content <- sprintf "С самим собой обручаться низзя."
+                responseEphemeral b
+
+            else
+                let user2 =
+                    try
+                        await <| e.Interaction.Guild.GetMemberAsync user2Id
+                        |> Ok
+                    with e ->
+                        Error e.Message
+
+                match user2 with
+                | Ok user2 ->
+                    if user2.IsBot then
+                        let b = Entities.DiscordMessageBuilder()
+                        b.Content <- sprintf "С ботом <@%d> низзя обручиться." user2Id
+                        responseEphemeral b
+                    else
+                        Views.MerryConformationView.conformationView user1Id user2Id
+                        |> response
+
+                | Error(errorValue) ->
+                    let b = Entities.DiscordMessageBuilder()
+                    b.Content <- sprintf "```\n%s\n```" errorValue
+                    responseEphemeral b
+
+            state
+
         | Divorce ->
-            interp (Top.divorce user1Id) state
+            interp guildId response (Top.divorce user1Id) state
+
         | Status targetUserId ->
             let targetUserId =
                 targetUserId
                 |> Option.defaultValue user1Id
-            interp (Top.getSpouse targetUserId) state
+
+            interp guildId response (Top.getSpouse targetUserId) state
+
+        | ConfirmMerry(_) ->
+            failwith "ConfirmMerry is not Implemented"
+        | CancelMerry(_) ->
+            failwith "CancelMerry is not Implemented"
+
+    | RequestInteraction(client, e, act) ->
+        let response (b: Entities.DiscordMessageBuilder) =
+            let b = Entities.DiscordInteractionResponseBuilder(b)
+            let typ =
+                InteractionResponseType.UpdateMessage
+            awaiti <| e.Interaction.CreateResponseAsync (typ, b)
+
+        let responseEphemeral (b: Entities.DiscordMessageBuilder) =
+            let b = Entities.DiscordInteractionResponseBuilder(b)
+            b.IsEphemeral <- true
+
+            let typ =
+                InteractionResponseType.ChannelMessageWithSource
+            awaiti <| e.Interaction.CreateResponseAsync (typ, b)
+
+        let send (targetUserId: UserId) =
+            let b = Entities.DiscordMessageBuilder()
+            b.Content <- sprintf "На эту кнопку должен нажать <@%d>." targetUserId
+            responseEphemeral b
+
+        match act with
+        | GetMarried user2Id ->
+            failwithf "GetMarried not implemented"
+
+        | Divorce ->
+            failwithf "Divorce not implemented"
+
+        | Status targetUserId ->
+            failwithf "Status not implemented"
+
+        | ConfirmMerry pair ->
+            let guildId = e.Guild.Id
+            if e.User.Id = pair.TargetUserId then
+                interp guildId response (Top.merry pair.SourceUserId pair.TargetUserId) state
+            else
+                send pair.TargetUserId
+
+                state
+
+        | CancelMerry pair ->
+            if e.User.Id = pair.TargetUserId then
+                let str = sprintf "<@%d>, увы, но носок <@%d> тебе отказал." pair.SourceUserId pair.TargetUserId
+                Views.MerryResultView.view str
+                |> response
+            else
+                send pair.TargetUserId
+
+            state
 
 let create db =
     let m =
@@ -196,7 +459,81 @@ let create db =
             status
         |]
 
+    let componentInteractionCreateHandler (client: DiscordClient, e: EventArgs.ComponentInteractionCreateEventArgs) =
+        let restartComponent errMsg =
+            try
+                DiscordMessage.Ext.clearComponents e.Message
+            with e ->
+                printfn "%A" e.Message
+
+            let b = Entities.DiscordInteractionResponseBuilder()
+            b.Content <-
+                [
+                    sprintf "Вызовите эту комманду еще раз, потому что-то пошло не так:"
+                    "```"
+                    sprintf "%s" errMsg
+                    "```"
+                ] |> String.concat "\n"
+            b.IsEphemeral <- true
+            awaiti <| e.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, b)
+
+        let isMessageBelongToBot () next =
+            if e.Message.Author.Id = client.CurrentUser.Id then
+                next ()
+            else
+                false
+
+        isMessageBelongToBot () <| fun () ->
+
+        match Interaction.ComponentState.Parser.parse e.Id with
+        | Some res ->
+            match res with
+            | Ok (ids, parseData) ->
+                let formId = ids.FormId
+                if formId = Views.MerryConformationView.viewId then
+                    match Map.tryFind ids.ComponentId Views.MerryConformationView.handlers with
+                    | Some x ->
+                        match x with
+                        | Views.MerryConformationView.Handler.ConfirmButtonHandler (parser, handle) ->
+                            match parseData parser with
+                            | Ok x ->
+                                RequestInteraction (client, e, handle x)
+                                |> m.Post
+
+                            | Error(errorValue) ->
+                                sprintf "Views.MerryConformationView.Handler.ConfirmButtonHandler\n%s" errorValue
+                                |> restartComponent
+
+                        | Views.MerryConformationView.Handler.CancelButtonHandler (parser, handle) ->
+                            match parseData parser with
+                            | Ok x ->
+                                RequestInteraction (client, e, handle x)
+                                |> m.Post
+
+                            | Error(errorValue) ->
+                                sprintf "Views.MerryConformationView.Handler.CancelButtonHandler\n%s" errorValue
+                                |> restartComponent
+
+                    | None ->
+                        sprintf "Not found '%A' ComponentId" ids.ComponentId
+                        |> restartComponent
+
+                else
+                    sprintf "Not implemented '%A' FormId" formId
+                    |> restartComponent
+
+            | Error errMsg ->
+                errMsg
+                |> restartComponent
+
+            true
+        | None ->
+            false
+
     { Shared.BotModule.empty with
         InteractionCommands =
             Some commands
+
+        ComponentInteractionCreateHandle =
+            Some componentInteractionCreateHandler
     }
