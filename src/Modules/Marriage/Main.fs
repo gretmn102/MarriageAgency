@@ -5,11 +5,10 @@ open FsharpMyExtension.Either
 
 open Types
 open Extensions
-open Model
 
 type State =
     {
-        MarriedCouples: MarriedCouples.GuildData
+        MarriedCouples: Model.MarriedCouples.GuildData
     }
 
 type Pair =
@@ -188,22 +187,22 @@ let rec reduce (msg: Msg) (state: State): State =
     let interp guildId send cmd state =
         let rec interp cmd state =
             match cmd with
-            | Top.Print(str, next) ->
+            | Model.Print(str, next) ->
                 Views.MerryResultView.view str
                 |> send
 
                 interp (next ()) state
 
-            | Top.MarriedCouplesCm req ->
+            | Model.MarriedCouplesCm req ->
                 let req, newMarriedCouples =
-                    MarriedCouples.interp guildId req state.MarriedCouples
+                    Model.MarriedCouples.interp guildId req state.MarriedCouples
 
                 let state =
                     { state with
                         MarriedCouples = newMarriedCouples
                     }
                 interp req state
-            | Top.End -> state
+            | Model.End -> state
 
         interp cmd state
 
@@ -259,14 +258,14 @@ let rec reduce (msg: Msg) (state: State): State =
             state
 
         | Divorce ->
-            interp guildId response (Top.divorce user1Id) state
+            interp guildId response (Model.divorce user1Id) state
 
         | Status targetUserId ->
             let targetUserId =
                 targetUserId
                 |> Option.defaultValue user1Id
 
-            interp guildId response (Top.getSpouse targetUserId) state
+            interp guildId response (Model.getSpouse targetUserId) state
 
         | ConfirmMerry(_) ->
             failwith "ConfirmMerry is not Implemented"
@@ -306,7 +305,7 @@ let rec reduce (msg: Msg) (state: State): State =
         | ConfirmMerry pair ->
             let guildId = e.Guild.Id
             if e.User.Id = pair.TargetUserId then
-                interp guildId response (Top.merry pair.SourceUserId pair.TargetUserId) state
+                interp guildId response (Model.merry pair.SourceUserId pair.TargetUserId) state
             else
                 send pair.TargetUserId
 
@@ -325,7 +324,7 @@ let rec reduce (msg: Msg) (state: State): State =
 let create db =
     let m =
         let init: State = {
-            MarriedCouples = MarriedCouples.GuildData.init "marriedCouples" db
+            MarriedCouples = Model.MarriedCouples.GuildData.init "marriedCouples" db
         }
 
         MailboxProcessor.Start (fun mail ->
