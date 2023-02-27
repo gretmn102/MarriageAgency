@@ -5,123 +5,7 @@ open FsharpMyExtension.Either
 
 open Types
 open Extensions
-
-type State =
-    {
-        MarriedCouples: Model.MarriedCouples.GuildData
-    }
-
-type Pair =
-    {
-        SourceUserId: UserId
-        TargetUserId: UserId
-    }
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-[<RequireQualifiedAccess>]
-module Pair =
-    let create sourceUserId targetUserId =
-        {
-            SourceUserId = sourceUserId
-            TargetUserId = targetUserId
-        }
-
-    module Printer =
-        open FsharpMyExtension.ShowList
-
-        let showT (p: Pair) =
-            shows p.SourceUserId << nl
-            << shows p.TargetUserId
-
-    module Parser =
-        open FParsec
-
-        let parse<'UserState> : Parser<_, 'UserState> =
-            pipe2
-                (puint64 .>> newline)
-                puint64
-                create
-
-type Action =
-    | GetMarried of UserId
-    | Divorce
-    | Status of UserId option
-
-    | ConfirmMerry of Pair
-    | CancelMerry of Pair
-
-module Views =
-    open Extensions.Interaction
-
-    type Handler<'Data> = 'Data -> Action
-    type DataParser<'Data> = FParsec.Primitives.Parser<'Data, unit>
-    type DataParserHandler<'Data> = DataParser<'Data> * Handler<'Data>
-
-    module MerryResultView =
-        let view str =
-            let b = Entities.DiscordMessageBuilder()
-            b.Content <- str
-            b
-
-    module MerryConformationView =
-        let viewId = "merryConformationId"
-
-        type ComponentId =
-            | ConfirmButton = 0
-            | CancelButton = 1
-
-        type Handler =
-            | ConfirmButtonHandler of DataParserHandler<Pair>
-            | CancelButtonHandler of DataParserHandler<Pair>
-
-        let handlers: Map<ComponentId, Handler> =
-            [
-                ComponentId.ConfirmButton, ConfirmButtonHandler (Pair.Parser.parse, fun data ->
-                    ConfirmMerry data
-                )
-                ComponentId.CancelButton, CancelButtonHandler (Pair.Parser.parse, fun data ->
-                    CancelMerry data
-                )
-            ]
-            |> Map.ofList
-
-        let conformationView (authorId: UserId) (targetUserId: UserId) =
-            let b = Entities.DiscordMessageBuilder()
-
-            b.Content <-
-                sprintf "<@%d>, тут это, носок <@%d> хочет с тобой породниться. Соглашаешься?"
-                    targetUserId
-                    authorId
-
-            let сonfirmButton =
-                let id =
-                    ComponentState.create
-                        viewId
-                        ComponentId.ConfirmButton
-                        (Pair.create authorId targetUserId)
-                Entities.DiscordButtonComponent(
-                    ButtonStyle.Primary,
-                    ComponentState.serialize Pair.Printer.showT id,
-                    "Согласиться!"
-                )
-
-            let cancelButton =
-                let id =
-                    ComponentState.create
-                        viewId
-                        ComponentId.CancelButton
-                        (Pair.create authorId targetUserId)
-                Entities.DiscordButtonComponent(
-                    ButtonStyle.Danger,
-                    ComponentState.serialize Pair.Printer.showT id,
-                    "Отказать!"
-                )
-
-            b.AddComponents [|
-                сonfirmButton :> Entities.DiscordComponent
-                cancelButton :> Entities.DiscordComponent
-            |] |> ignore
-
-            b
+open Views
 
 type Msg =
     | RequestSlashCommand of EventArgs.InteractionCreateEventArgs * Action
@@ -183,12 +67,17 @@ module Interaction =
                     )
                 )
 
+type State =
+    {
+        MarriedCouples: Model.MarriedCouples.GuildData
+    }
+
 let rec reduce (msg: Msg) (state: State): State =
     let interp guildId send cmd state =
         let rec interp cmd state =
             match cmd with
             | Model.Print(str, next) ->
-                Views.MerryResultView.view str
+                MerryResultView.view str
                 |> send
 
                 interp (next ()) state
@@ -247,7 +136,7 @@ let rec reduce (msg: Msg) (state: State): State =
                         b.Content <- sprintf "С ботом <@%d> низзя обручиться." user2Id
                         responseEphemeral b
                     else
-                        Views.MerryConformationView.conformationView user1Id user2Id
+                        MerryConformationView.conformationView user1Id user2Id
                         |> response
 
                 | Error(errorValue) ->
@@ -314,7 +203,7 @@ let rec reduce (msg: Msg) (state: State): State =
         | CancelMerry pair ->
             if e.User.Id = pair.TargetUserId then
                 let str = sprintf "<@%d>, увы, но носок <@%d> тебе отказал." pair.SourceUserId pair.TargetUserId
-                Views.MerryResultView.view str
+                MerryResultView.view str
                 |> response
             else
                 send pair.TargetUserId
@@ -489,11 +378,11 @@ let create db =
             match res with
             | Ok (ids, parseData) ->
                 let formId = ids.FormId
-                if formId = Views.MerryConformationView.viewId then
-                    match Map.tryFind ids.ComponentId Views.MerryConformationView.handlers with
+                if formId = MerryConformationView.viewId then
+                    match Map.tryFind ids.ComponentId MerryConformationView.handlers with
                     | Some x ->
                         match x with
-                        | Views.MerryConformationView.Handler.ConfirmButtonHandler (parser, handle) ->
+                        | MerryConformationView.Handler.ConfirmButtonHandler (parser, handle) ->
                             match parseData parser with
                             | Ok x ->
                                 RequestInteraction (client, e, handle x)
@@ -503,7 +392,7 @@ let create db =
                                 sprintf "Views.MerryConformationView.Handler.ConfirmButtonHandler\n%s" errorValue
                                 |> restartComponent
 
-                        | Views.MerryConformationView.Handler.CancelButtonHandler (parser, handle) ->
+                        | MerryConformationView.Handler.CancelButtonHandler (parser, handle) ->
                             match parseData parser with
                             | Ok x ->
                                 RequestInteraction (client, e, handle x)
