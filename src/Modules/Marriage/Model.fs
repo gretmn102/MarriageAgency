@@ -38,7 +38,9 @@ module MarriedCouplesCmd =
 
 type MarriageCmd =
     | MarriedCouplesCm of MarriedCouplesCmd<MarriageCmd>
-    | Print of Req<string, unit, MarriageCmd>
+    | Print of Req<{| IsEphemeral: bool; Description: string |}, unit, MarriageCmd>
+    | UserIsBot of Req<UserId, bool, MarriageCmd>
+    | CreateConformationView of Req<UserId * UserId, unit, MarriageCmd>
     | End
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -49,20 +51,27 @@ module MarriageCmd =
             next res
         ))
 
-    let print str next =
-        Print(str, fun () ->
+    let print isEphemeral description next =
+        let args = {| IsEphemeral = isEphemeral; Description = description |}
+        Print(args, fun () ->
             next ()
         )
+
+    let userIsBot userId next =
+        UserIsBot(userId, next)
+
+    let createConformationView user1Id user2Id next =
+        CreateConformationView((user1Id, user2Id), next)
 
 let getSpouse userId =
     builder {
         let! spouse = MarriageCmd.apply MarriedCouplesCmd.getSpouse userId
         match spouse with
         | Some user2Id ->
-            do! sprintf "<@%d> в союзе с <@%d>." userId user2Id |> MarriageCmd.print
+            do! sprintf "<@%d> в союзе с <@%d>." userId user2Id |> MarriageCmd.print true
             return End
         | None ->
-            do! sprintf "<@%d> ни с кем не обручен." userId |> MarriageCmd.print
+            do! sprintf "<@%d> ни с кем не обручен." userId |> MarriageCmd.print true
             return End
     }
 
@@ -71,36 +80,57 @@ let divorce userId =
         let! spouse = MarriageCmd.apply MarriedCouplesCmd.divorce userId
         match spouse with
         | Some user2Id ->
-            do! sprintf "<@%d>, ты развелся с <@%d>!" userId user2Id |> MarriageCmd.print
+            do! sprintf "<@%d> развелся с <@%d>!" userId user2Id |> MarriageCmd.print false
             return End
         | None ->
-            do! sprintf "<@%d>, ты ни с кем не обручен, чтобы разводиться!" userId |> MarriageCmd.print
+            do! sprintf "<@%d>, ты ни с кем не обручен, чтобы разводиться!" userId |> MarriageCmd.print true
             return End
     }
 
-let merry user1Id user2Id =
-    let testSelfMarried () next =
+let merryTests user1Id user2Id next =
+    let testSelfMarried user1Id user2Id next =
         builder {
             if user1Id = user2Id then
-                do! "Нельзя обручиться с самим собой!" |> MarriageCmd.print
+                do! "Нельзя обручиться с самим собой!" |> MarriageCmd.print true
                 return End
             else
                 return next ()
         }
 
-    let testIsMarried () next =
+    let testIsMarried userId next =
         builder {
             let! spouse =
-                MarriageCmd.apply MarriedCouplesCmd.getSpouse user1Id
+                MarriageCmd.apply MarriedCouplesCmd.getSpouse userId
 
             match spouse with
             | None ->
                 return next ()
             | Some user2Id ->
-                do! sprintf "<@%d> уже в союзе с <@%d>!" user1Id user2Id |> MarriageCmd.print
+                do! sprintf "<@%d> уже в союзе с <@%d>!" userId user2Id |> MarriageCmd.print true
                 return End
         }
 
+    let testUserIsBot user2Id next =
+        builder {
+            let! isBot =
+                MarriageCmd.userIsBot user2Id
+
+            if isBot then
+                do! sprintf "С ботом <@%d> низзя обручиться!" user2Id |> MarriageCmd.print true
+                return End
+            else
+                return next ()
+        }
+
+    builder {
+        do! testSelfMarried user1Id user2Id
+        do! testUserIsBot user2Id
+        do! testIsMarried user1Id
+        do! testIsMarried user2Id
+        return next ()
+    }
+
+let merry user1Id user2Id =
     let merry () next =
         builder {
             let! res =
@@ -109,15 +139,21 @@ let merry user1Id user2Id =
             | Ok () ->
                 return next ()
             | Error errMsg ->
-                do! MarriageCmd.print errMsg
+                do! MarriageCmd.print true errMsg
                 return End
         }
 
     builder {
-        do! testSelfMarried ()
-        do! testIsMarried ()
+        do! merryTests user1Id user2Id
         do! merry ()
-        do! sprintf "Объявляю вас парой носков! Можете обменяться нитками." |> MarriageCmd.print
+        do! sprintf "Объявляю вас парой носков! Можете обменяться нитками." |> MarriageCmd.print false
+        return End
+    }
+
+let startMerry user1Id user2Id =
+    builder {
+        do! merryTests user1Id user2Id
+        do! MarriageCmd.createConformationView user1Id user2Id
         return End
     }
 

@@ -73,12 +73,18 @@ type State =
     }
 
 let rec reduce (msg: Msg) (state: State): State =
-    let interp guildId send cmd state =
+    let interp guildId response responseEphemeral getMemberAsync cmd state =
         let rec interp cmd state =
             match cmd with
-            | Model.Print(str, next) ->
-                MerryResultView.view str
-                |> send
+            | Model.Print(args, next) ->
+                let response =
+                    if args.IsEphemeral then
+                        responseEphemeral
+                    else
+                        response
+
+                MerryResultView.view args.Description
+                |> response
 
                 interp (next ()) state
 
@@ -91,6 +97,32 @@ let rec reduce (msg: Msg) (state: State): State =
                         MarriedCouples = newMarriedCouples
                     }
                 interp req state
+
+            | Model.CreateConformationView((user1Id, user2Id), next) ->
+                MerryConformationView.conformationView user1Id user2Id
+                |> response
+
+                interp (next ()) state
+            | Model.UserIsBot(userId, userIdBot) ->
+                let user =
+                    try
+                        let guildMember: Entities.DiscordMember = await <| getMemberAsync userId
+                        Ok guildMember
+                    with e ->
+                        Error e.Message
+
+                match user with
+                | Ok user ->
+                    let req = userIdBot user.IsBot
+
+                    interp req state
+                | Error(errorValue) ->
+                    let b = Entities.DiscordMessageBuilder()
+                    b.Content <- sprintf "```\n%s\n```" errorValue
+                    responseEphemeral b
+
+                    state
+
             | Model.End -> state
 
         interp cmd state
@@ -114,47 +146,22 @@ let rec reduce (msg: Msg) (state: State): State =
                 InteractionResponseType.ChannelMessageWithSource
             awaiti <| e.Interaction.CreateResponseAsync (typ, b)
 
+        let getMemberAsync userId =
+            e.Interaction.Guild.GetMemberAsync userId
+
         match act with
         | GetMarried user2Id ->
-            if user1Id = user2Id then
-                let b = Entities.DiscordMessageBuilder()
-                b.Content <- sprintf "С самим собой обручаться низзя."
-                responseEphemeral b
-
-            else
-                let user2 =
-                    try
-                        await <| e.Interaction.Guild.GetMemberAsync user2Id
-                        |> Ok
-                    with e ->
-                        Error e.Message
-
-                match user2 with
-                | Ok user2 ->
-                    if user2.IsBot then
-                        let b = Entities.DiscordMessageBuilder()
-                        b.Content <- sprintf "С ботом <@%d> низзя обручиться." user2Id
-                        responseEphemeral b
-                    else
-                        MerryConformationView.conformationView user1Id user2Id
-                        |> response
-
-                | Error(errorValue) ->
-                    let b = Entities.DiscordMessageBuilder()
-                    b.Content <- sprintf "```\n%s\n```" errorValue
-                    responseEphemeral b
-
-            state
+            interp guildId response responseEphemeral getMemberAsync (Model.startMerry user1Id user2Id) state
 
         | Divorce ->
-            interp guildId response (Model.divorce user1Id) state
+            interp guildId response responseEphemeral getMemberAsync (Model.divorce user1Id) state
 
         | Status targetUserId ->
             let targetUserId =
                 targetUserId
                 |> Option.defaultValue user1Id
 
-            interp guildId response (Model.getSpouse targetUserId) state
+            interp guildId response responseEphemeral getMemberAsync (Model.getSpouse targetUserId) state
 
         | ConfirmMerry(_) ->
             failwith "ConfirmMerry is not Implemented"
@@ -176,6 +183,9 @@ let rec reduce (msg: Msg) (state: State): State =
                 InteractionResponseType.ChannelMessageWithSource
             awaiti <| e.Interaction.CreateResponseAsync (typ, b)
 
+        let getMemberAsync userId =
+            e.Interaction.Guild.GetMemberAsync userId
+
         let send (targetUserId: UserId) =
             let b = Entities.DiscordMessageBuilder()
             b.Content <- sprintf "На эту кнопку должен нажать <@%d>." targetUserId
@@ -194,7 +204,7 @@ let rec reduce (msg: Msg) (state: State): State =
         | ConfirmMerry pair ->
             let guildId = e.Guild.Id
             if e.User.Id = pair.TargetUserId then
-                interp guildId response (Model.merry pair.SourceUserId pair.TargetUserId) state
+                interp guildId response responseEphemeral getMemberAsync (Model.merry pair.SourceUserId pair.TargetUserId) state
             else
                 send pair.TargetUserId
 
