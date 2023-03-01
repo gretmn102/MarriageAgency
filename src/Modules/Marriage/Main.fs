@@ -7,8 +7,13 @@ open Types
 open Extensions
 open Views
 
+type SlashCommand =
+    | GetMarried of UserId
+    | Divorce
+    | Status of UserId option
+
 type Msg =
-    | RequestSlashCommand of EventArgs.InteractionCreateEventArgs * Action
+    | RequestSlashCommand of EventArgs.InteractionCreateEventArgs * SlashCommand
     | RequestInteraction of DiscordClient * EventArgs.ComponentInteractionCreateEventArgs * Action
 
 module FParsecExt =
@@ -163,11 +168,6 @@ let rec reduce (msg: Msg) (state: State): State =
 
             interp guildId response responseEphemeral getMemberAsync (Model.getSpouse targetUserId) state
 
-        | ConfirmMerry(_) ->
-            failwith "ConfirmMerry is not Implemented"
-        | CancelMerry(_) ->
-            failwith "CancelMerry is not Implemented"
-
     | RequestInteraction(client, e, act) ->
         let response (b: Entities.DiscordMessageBuilder) =
             let b = Entities.DiscordInteractionResponseBuilder(b)
@@ -192,15 +192,6 @@ let rec reduce (msg: Msg) (state: State): State =
             responseEphemeral b
 
         match act with
-        | GetMarried user2Id ->
-            failwithf "GetMarried not implemented"
-
-        | Divorce ->
-            failwithf "Divorce not implemented"
-
-        | Status targetUserId ->
-            failwithf "Status not implemented"
-
         | ConfirmMerry pair ->
             let guildId = e.Guild.Id
             if e.User.Id = pair.TargetUserId then

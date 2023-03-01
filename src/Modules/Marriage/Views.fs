@@ -35,10 +35,6 @@ module Pair =
                 create
 
 type Action =
-    | GetMarried of UserId
-    | Divorce
-    | Status of UserId option
-
     | ConfirmMerry of Pair
     | CancelMerry of Pair
 
