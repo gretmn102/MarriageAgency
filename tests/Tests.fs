@@ -52,7 +52,7 @@ module Interaction =
                                 match value with
                                 | Ok(x, f) ->
                                     let componentId: Marriage.Views.MerryConformationView.ComponentId = x.ComponentId
-                                    let x = f Marriage.Views.Pair.Parser.parse
+                                    let x = f Marriage.Views.MerryConformationView.Pair.Parser.parse
                                     true
                                 | Error(errorValue) ->
                                     failwithf "%s" errorValue

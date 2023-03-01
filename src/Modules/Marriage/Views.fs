@@ -4,43 +4,9 @@ open DSharpPlus
 open Extensions.Interaction
 open Types
 
-type Pair =
-    {
-        SourceUserId: UserId
-        TargetUserId: UserId
-    }
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-[<RequireQualifiedAccess>]
-module Pair =
-    let create sourceUserId targetUserId =
-        {
-            SourceUserId = sourceUserId
-            TargetUserId = targetUserId
-        }
-
-    module Printer =
-        open FsharpMyExtension.ShowList
-
-        let showT (p: Pair) =
-            shows p.SourceUserId << nl
-            << shows p.TargetUserId
-
-    module Parser =
-        open FParsec
-
-        let parse<'UserState> : Parser<_, 'UserState> =
-            pipe2
-                (puint64 .>> newline)
-                puint64
-                create
-
-type Action =
-    | ConfirmMerry of Pair
-    | CancelMerry of Pair
-
-type Handler<'Data> = 'Data -> Action
+type Handler<'Data, 'Action> = 'Data -> 'Action
 type DataParser<'Data> = FParsec.Primitives.Parser<'Data, unit>
-type DataParserHandler<'Data> = DataParser<'Data> * Handler<'Data>
+type DataParserHandler<'Data, 'Action> = DataParser<'Data> * Handler<'Data, 'Action>
 
 module MerryResultView =
     let view str =
@@ -55,18 +21,48 @@ module MerryConformationView =
         | ConfirmButton = 0
         | CancelButton = 1
 
+    type Pair =
+        {
+            SourceUserId: UserId
+            TargetUserId: UserId
+        }
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    [<RequireQualifiedAccess>]
+    module Pair =
+        let create sourceUserId targetUserId =
+            {
+                SourceUserId = sourceUserId
+                TargetUserId = targetUserId
+            }
+
+        module Printer =
+            open FsharpMyExtension.ShowList
+
+            let showT (p: Pair) =
+                shows p.SourceUserId << nl
+                << shows p.TargetUserId
+
+        module Parser =
+            open FParsec
+
+            let parse<'UserState> : Parser<_, 'UserState> =
+                pipe2
+                    (puint64 .>> newline)
+                    puint64
+                    create
+
+    type Action =
+        | ConfirmMerry of Pair
+        | CancelMerry of Pair
+
     type Handler =
-        | ConfirmButtonHandler of DataParserHandler<Pair>
-        | CancelButtonHandler of DataParserHandler<Pair>
+        | ConfirmButtonHandler of DataParserHandler<Pair, Action>
+        | CancelButtonHandler of DataParserHandler<Pair, Action>
 
     let handlers: Map<ComponentId, Handler> =
         [
-            ComponentId.ConfirmButton, ConfirmButtonHandler (Pair.Parser.parse, fun data ->
-                ConfirmMerry data
-            )
-            ComponentId.CancelButton, CancelButtonHandler (Pair.Parser.parse, fun data ->
-                CancelMerry data
-            )
+            ComponentId.ConfirmButton, ConfirmButtonHandler (Pair.Parser.parse, ConfirmMerry)
+            ComponentId.CancelButton, CancelButtonHandler (Pair.Parser.parse, CancelMerry)
         ]
         |> Map.ofList
 

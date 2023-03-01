@@ -12,9 +12,12 @@ type SlashCommand =
     | Divorce
     | Status of UserId option
 
+type ViewAction =
+    | ConformationViewAction of MerryConformationView.Action
+
 type Msg =
     | RequestSlashCommand of EventArgs.InteractionCreateEventArgs * SlashCommand
-    | RequestInteraction of DiscordClient * EventArgs.ComponentInteractionCreateEventArgs * Action
+    | RequestInteraction of DiscordClient * EventArgs.ComponentInteractionCreateEventArgs * ViewAction
 
 module FParsecExt =
     open FParsec
@@ -192,24 +195,26 @@ let rec reduce (msg: Msg) (state: State): State =
             responseEphemeral b
 
         match act with
-        | ConfirmMerry pair ->
-            let guildId = e.Guild.Id
-            if e.User.Id = pair.TargetUserId then
-                interp guildId response responseEphemeral getMemberAsync (Model.merry pair.SourceUserId pair.TargetUserId) state
-            else
-                send pair.TargetUserId
+        | ConformationViewAction act ->
+            match act with
+            | MerryConformationView.ConfirmMerry pair ->
+                let guildId = e.Guild.Id
+                if e.User.Id = pair.TargetUserId then
+                    interp guildId response responseEphemeral getMemberAsync (Model.merry pair.SourceUserId pair.TargetUserId) state
+                else
+                    send pair.TargetUserId
+
+                    state
+
+            | MerryConformationView.CancelMerry pair ->
+                if e.User.Id = pair.TargetUserId then
+                    let str = sprintf "<@%d>, увы, но носок <@%d> тебе отказал." pair.SourceUserId pair.TargetUserId
+                    MerryResultView.view str
+                    |> response
+                else
+                    send pair.TargetUserId
 
                 state
-
-        | CancelMerry pair ->
-            if e.User.Id = pair.TargetUserId then
-                let str = sprintf "<@%d>, увы, но носок <@%d> тебе отказал." pair.SourceUserId pair.TargetUserId
-                MerryResultView.view str
-                |> response
-            else
-                send pair.TargetUserId
-
-            state
 
 let create db =
     let m =
@@ -386,7 +391,7 @@ let create db =
                         | MerryConformationView.Handler.ConfirmButtonHandler (parser, handle) ->
                             match parseData parser with
                             | Ok x ->
-                                RequestInteraction (client, e, handle x)
+                                RequestInteraction (client, e, ConformationViewAction (handle x))
                                 |> m.Post
 
                             | Error(errorValue) ->
@@ -396,7 +401,7 @@ let create db =
                         | MerryConformationView.Handler.CancelButtonHandler (parser, handle) ->
                             match parseData parser with
                             | Ok x ->
-                                RequestInteraction (client, e, handle x)
+                                RequestInteraction (client, e, ConformationViewAction (handle x))
                                 |> m.Post
 
                             | Error(errorValue) ->
