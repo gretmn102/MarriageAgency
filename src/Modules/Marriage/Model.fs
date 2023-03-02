@@ -36,11 +36,112 @@ module MarriedCouplesCmd =
     let divorce userId next =
         Divorce(userId, next)
 
+type MerryArgs =
+    {
+        MatchmakerId: UserId
+        User1Id: UserId
+        User2Id: UserId
+    }
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<RequireQualifiedAccess>]
+module MerryArgs =
+    let create matchmakerId user1Id user2Id =
+        {
+            MatchmakerId = matchmakerId
+            User1Id = user1Id
+            User2Id = user2Id
+        }
+
+[<Struct; RequireQualifiedAccess>]
+type MerryConformation2Status =
+    | Unknown
+    | Agree
+    | Disagree
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<RequireQualifiedAccess>]
+module MerryConformation2Status =
+    module Printer =
+        open FsharpMyExtension.ShowList
+
+        let showT (status: MerryConformation2Status) =
+            match status with
+            | MerryConformation2Status.Unknown -> 0
+            | MerryConformation2Status.Agree -> 1
+            | MerryConformation2Status.Disagree -> 2
+            |> shows
+
+    let serialize (status: MerryConformation2Status) =
+        Printer.showT status |> FsharpMyExtension.ShowList.show
+
+    module Parser =
+        open FParsec
+
+        let parser<'UserState> : Parser<_, 'UserState> =
+            pint32
+            >>= function
+                | 0 -> preturn MerryConformation2Status.Unknown
+                | 1 -> preturn MerryConformation2Status.Agree
+                | 2 -> preturn MerryConformation2Status.Disagree
+                | n -> fail (sprintf "unknown UserStatus(%A)" n)
+
+    let deserialize str =
+        FParsecExt.runEither Parser.parser str
+
+type MerryConformation2State =
+    {
+        MatchmakerId: UserId
+        User1Status: UserId * MerryConformation2Status
+        User2Status: UserId * MerryConformation2Status
+    }
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<RequireQualifiedAccess>]
+module MerryConformation2State =
+    let create matchmakerId user1Id user2Id =
+        {
+            MatchmakerId = matchmakerId
+            User1Status = user1Id
+            User2Status = user2Id
+        }
+
+    let ofMerryArgs (args: MerryArgs) =
+        {
+            MatchmakerId = args.MatchmakerId
+            User1Status = args.User1Id, MerryConformation2Status.Unknown
+            User2Status = args.User2Id, MerryConformation2Status.Unknown
+        }
+
+    module Printer =
+        open FsharpMyExtension.ShowList
+
+        let showT (p: MerryConformation2State) =
+            let showUser (userId: UserId) = shows userId
+            let showUserIdState (userId, status) =
+                showUser userId << showSpace << MerryConformation2Status.Printer.showT status
+
+            showUser p.MatchmakerId << nl
+            << showUserIdState p.User1Status << nl
+            << showUserIdState p.User2Status
+
+    module Parser =
+        open FParsec
+
+        let parse<'UserState> : Parser<_, 'UserState> =
+            let puser = puint64
+            let parseUserIdState =
+                tuple2 (puser .>> spaces) MerryConformation2Status.Parser.parser
+
+            pipe3
+                (puser .>> newline)
+                (parseUserIdState .>> newline)
+                parseUserIdState
+                create
+
 type MarriageCmd =
     | MarriedCouplesCm of MarriedCouplesCmd<MarriageCmd>
     | Print of Req<{| IsEphemeral: bool; Description: string |}, unit, MarriageCmd>
     | UserIsBot of Req<UserId, bool, MarriageCmd>
     | CreateConformationView of Req<UserId * UserId, unit, MarriageCmd>
+    | CreateConformation2View of Req<MerryConformation2State, unit, MarriageCmd>
     | End
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -62,6 +163,9 @@ module MarriageCmd =
 
     let createConformationView user1Id user2Id next =
         CreateConformationView((user1Id, user2Id), next)
+
+    let createConformation2View state next =
+        CreateConformation2View(state, next)
 
 let getSpouse userId =
     builder {
@@ -150,11 +254,92 @@ let merry user1Id user2Id =
         return End
     }
 
-let startMerry user1Id user2Id =
+let startGetMerry user1Id user2Id =
     builder {
         do! merryTests user1Id user2Id
         do! MarriageCmd.createConformationView user1Id user2Id
         return End
+    }
+
+let startMerry ({ MatchmakerId = matchmakerId; User1Id = user1Id; User2Id = user2Id } as args: MerryArgs) =
+    let testMatchMakerIsMarried =
+        matchmakerId = user1Id || matchmakerId = user2Id
+
+    if testMatchMakerIsMarried then
+        startGetMerry user1Id user2Id
+    else
+        builder {
+            do! merryTests user1Id user2Id
+            do! MarriageCmd.createConformation2View (MerryConformation2State.ofMerryArgs args)
+            return End
+        }
+
+let confirm2Merry isAgree (currentUserId: UserId) (internalState: MerryConformation2State) =
+    let testCurrentUserIsValid currentUserId next =
+        let test (userId, userStatus) next =
+            if isAgree then
+                builder {
+                    match userStatus with
+                    | MerryConformation2Status.Unknown
+                    | MerryConformation2Status.Disagree ->
+                        return next (userId, MerryConformation2Status.Agree)
+                    | MerryConformation2Status.Agree ->
+                        do! sprintf "Ты уже согласил(ся|ась)."
+                            |> MarriageCmd.print true
+                        return End
+                }
+            else
+                builder {
+                    match userStatus with
+                    | MerryConformation2Status.Unknown
+                    | MerryConformation2Status.Agree ->
+                        return next (userId, MerryConformation2Status.Disagree)
+                    | MerryConformation2Status.Disagree ->
+                        do! sprintf "Ты уже отказал(ся|ась)."
+                            |> MarriageCmd.print true
+                        return End
+                }
+
+        builder {
+            let {
+                MatchmakerId = matchmakerId
+                User1Status = user1Id, user1Status
+                User2Status = user2Id, user2Status
+            } = internalState
+
+            if currentUserId = user1Id then
+                let! res = test (user1Id, user1Status)
+                let internalState =
+                    { internalState with
+                        User1Status = res
+                    }
+                return next internalState
+            elif currentUserId = user2Id then
+                let! res = test (user2Id, user2Status)
+                let internalState =
+                    { internalState with
+                        User2Status = res
+                    }
+                return next internalState
+            else
+                do! sprintf "На эту кнопку должен нажать либо <@%d>, либо <@%d>." user1Id user2Id
+                    |> MarriageCmd.print true
+                return End
+        }
+
+    builder {
+        let! {
+            MatchmakerId = matchmakerId
+            User1Status = user1Id, user1Status
+            User2Status = user2Id, user2Status
+        } as internalState = testCurrentUserIsValid currentUserId
+
+        match user1Status, user2Status with
+        | MerryConformation2Status.Agree, MerryConformation2Status.Agree ->
+            return merry user1Id user2Id
+        | _ ->
+            do! MarriageCmd.createConformation2View internalState
+            return End
     }
 
 module MarriedCouples =

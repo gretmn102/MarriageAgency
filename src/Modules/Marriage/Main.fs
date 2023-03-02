@@ -8,12 +8,14 @@ open Extensions
 open Views
 
 type SlashCommand =
+    | Merry of Model.MerryArgs
     | GetMarried of UserId
     | Divorce
     | Status of UserId option
 
 type ViewAction =
     | ConformationViewAction of MerryConformationView.Action
+    | ConformationView2Action of MerryConformation2View.Action
 
 type Msg =
     | RequestSlashCommand of EventArgs.InteractionCreateEventArgs * SlashCommand
@@ -49,9 +51,17 @@ module Interaction =
 
             type 'a Parser = Parser<'a, unit>
 
+            let pformId: _ Parser = pescapedString
+
+            // let inline pcomponentId< ^ComponentId when ^ComponentId: enum<int32>> : ^ComponentId Parser =
+            //     pint32 |>> enum< ^ComponentId>
+
+            let pcomponentId: int32 Parser =
+                pint32
+
             let inline parseHeaders< ^ComponentId when ^ComponentId: enum<int32>> : {| FormId: string; ComponentId: ^ComponentId |} Parser =
                 pipe2
-                    (pescapedString .>> newline)
+                    (pformId .>> newline)
                     (pint32 .>> newline)
                     (fun formId componentId ->
                         {|
@@ -74,6 +84,23 @@ module Interaction =
                         res, parseData
                     )
                 )
+
+            let parseHeader str =
+                FParsecExt.runResult pheader str
+                |> Result.map (snd >> fun pos -> int pos.Index)
+                |> ResultExt.toOption
+
+            let parseFormId (index: int) str =
+                FParsecExt.runResultAt (pformId .>> newline) index str
+                |> Result.map (mapSnd (fun pos -> int pos.Index))
+
+            let parseComponentId (index: int) str =
+                FParsecExt.runResultAt (pcomponentId .>> newline) index str
+                |> Result.map (mapSnd (fun pos -> int pos.Index))
+
+            let parseData (pdata: 'Data Parser) (index: int) str =
+                FParsecExt.runResultAt (pdata: 'Data Parser) index str
+                |> Result.map fst
 
 type State =
     {
@@ -108,6 +135,11 @@ let rec reduce (msg: Msg) (state: State): State =
 
             | Model.CreateConformationView((user1Id, user2Id), next) ->
                 MerryConformationView.conformationView user1Id user2Id
+                |> response
+
+                interp (next ()) state
+            | Model.CreateConformation2View(internalState, next) ->
+                MerryConformation2View.create internalState
                 |> response
 
                 interp (next ()) state
@@ -159,7 +191,7 @@ let rec reduce (msg: Msg) (state: State): State =
 
         match act with
         | GetMarried user2Id ->
-            interp guildId response responseEphemeral getMemberAsync (Model.startMerry user1Id user2Id) state
+            interp guildId response responseEphemeral getMemberAsync (Model.startGetMerry user1Id user2Id) state
 
         | Divorce ->
             interp guildId response responseEphemeral getMemberAsync (Model.divorce user1Id) state
@@ -170,6 +202,9 @@ let rec reduce (msg: Msg) (state: State): State =
                 |> Option.defaultValue user1Id
 
             interp guildId response responseEphemeral getMemberAsync (Model.getSpouse targetUserId) state
+
+        | Merry args  ->
+            interp guildId response responseEphemeral getMemberAsync (Model.startMerry args) state
 
     | RequestInteraction(client, e, act) ->
         let response (b: Entities.DiscordMessageBuilder) =
@@ -216,6 +251,17 @@ let rec reduce (msg: Msg) (state: State): State =
 
                 state
 
+        | ConformationView2Action act ->
+            let userId = e.Interaction.User.Id
+            let guildId = e.Guild.Id
+
+            match act with
+            | MerryConformation2View.ConfirmMerry internalState ->
+                interp guildId response responseEphemeral getMemberAsync (Model.confirm2Merry true userId internalState) state
+
+            | MerryConformation2View.CancelMerry internalState ->
+                interp guildId response responseEphemeral getMemberAsync (Model.confirm2Merry false userId internalState) state
+
 let create db =
     let m =
         let init: State = {
@@ -239,6 +285,73 @@ let create db =
         )
 
     let commands =
+        let marry =
+            let slashCommandName = "marry"
+            let target1OptionName = "target1"
+            let target2OptionName = "target2"
+            InteractionCommand.SlashCommand {|
+                CommandName = slashCommandName
+                Command =
+                    let target1Option =
+                        Entities.DiscordApplicationCommandOption(
+                            target1OptionName,
+                            "first user",
+                            ApplicationCommandOptionType.User,
+                            required = true,
+                            name_localizations = Map [
+                                "ru", "один-носок"
+                            ]
+                        )
+
+                    let target2Option =
+                        Entities.DiscordApplicationCommandOption(
+                            target2OptionName,
+                            "second user",
+                            ApplicationCommandOptionType.User,
+                            required = true,
+                            name_localizations = Map [
+                                "ru", "другой-носок"
+                            ]
+                        )
+
+                    new Entities.DiscordApplicationCommand(
+                        slashCommandName,
+                        "Обвенчать два носка",
+                        ``type`` = ApplicationCommandType.SlashCommand,
+                        options = [
+                            target1Option
+                            target2Option
+                        ],
+                        name_localizations = Map [
+                            "ru", "обвенчать"
+                        ]
+                    )
+                Handler = fun e ->
+                    let getTargetId next =
+                        let res =
+                            e.Interaction.Data.Options
+                            |> Seq.fold
+                                (fun ((target1, target2) as st) x ->
+                                    if x.Name = target1OptionName then
+                                        Some x.Value, target2
+                                    elif x.Name = target2OptionName then
+                                        target1, Some x.Value
+                                    else
+                                        st
+                                )
+                                (None, None)
+
+                        match res with
+                        | Some target1, Some target2 ->
+                            let target1Id = target1 :?> uint64
+                            let target2Id = target2 :?> uint64
+                            next (target1Id, target2Id)
+                        | _ -> ()
+
+                    getTargetId <| fun (user1Id, user2Id) ->
+                    m.Post(RequestSlashCommand(e, Merry (Model.MerryArgs.create e.Interaction.User.Id user1Id user2Id)))
+            |}
+
         let getMarried =
             let slashCommandName = "get-married"
             let targetOptionName = "target"
@@ -348,6 +461,7 @@ let create db =
                     m.Post(RequestSlashCommand(e, Status targetId))
             |}
         [|
+            marry
             getMarried
             divorce
             status
@@ -379,41 +493,37 @@ let create db =
 
         isMessageBelongToBot () <| fun () ->
 
-        match Interaction.ComponentState.Parser.parse e.Id with
-        | Some res ->
-            match res with
-            | Ok (ids, parseData) ->
-                let formId = ids.FormId
-                if formId = MerryConformationView.viewId then
-                    match Map.tryFind ids.ComponentId MerryConformationView.handlers with
-                    | Some x ->
-                        match x with
-                        | MerryConformationView.Handler.ConfirmButtonHandler (parser, handle) ->
-                            match parseData parser with
+        let customId = e.Id
+        match Interaction.ComponentState.Parser.parseHeader customId with
+        | Some pos ->
+            match Interaction.ComponentState.Parser.parseFormId pos customId with
+            | Ok (formId, pos2) ->
+                match Interaction.ComponentState.Parser.parseComponentId (pos + pos2) customId with
+                | Ok (componentId, pos3) ->
+                    let parseData pdata =
+                        Interaction.ComponentState.Parser.parseData pdata (pos + pos2 + pos3) customId
+
+                    let inline handle (viewId, handle, action) next =
+                        let componentId = enum<_> componentId
+                        if formId = viewId then
+                            match handle componentId parseData with
                             | Ok x ->
-                                RequestInteraction (client, e, ConformationViewAction (handle x))
+                                RequestInteraction (client, e, action x)
                                 |> m.Post
 
-                            | Error(errorValue) ->
-                                sprintf "Views.MerryConformationView.Handler.ConfirmButtonHandler\n%s" errorValue
+                            | Error errMsg ->
+                                errMsg
                                 |> restartComponent
+                        else
+                            next ()
 
-                        | MerryConformationView.Handler.CancelButtonHandler (parser, handle) ->
-                            match parseData parser with
-                            | Ok x ->
-                                RequestInteraction (client, e, ConformationViewAction (handle x))
-                                |> m.Post
+                    Model.builder {
+                        do! handle (MerryConformationView.viewId, MerryConformationView.handle, ConformationViewAction)
+                        do! handle (MerryConformation2View.viewId, MerryConformation2View.handle, ConformationView2Action)
+                    }
 
-                            | Error(errorValue) ->
-                                sprintf "Views.MerryConformationView.Handler.CancelButtonHandler\n%s" errorValue
-                                |> restartComponent
-
-                    | None ->
-                        sprintf "Not found '%A' ComponentId" ids.ComponentId
-                        |> restartComponent
-
-                else
-                    sprintf "Not implemented '%A' FormId" formId
+                | Error(errMsg) ->
+                    errMsg
                     |> restartComponent
 
             | Error errMsg ->
