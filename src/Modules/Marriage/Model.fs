@@ -262,11 +262,10 @@ let startGetMerry user1Id user2Id =
     }
 
 let startMerry ({ MatchmakerId = matchmakerId; User1Id = user1Id; User2Id = user2Id } as args: MerryArgs) =
-    let testMatchMakerIsMarried =
-        matchmakerId = user1Id || matchmakerId = user2Id
-
-    if testMatchMakerIsMarried then
+    if matchmakerId = user1Id then
         startGetMerry user1Id user2Id
+    elif matchmakerId = user2Id then
+        startGetMerry user2Id user1Id
     else
         builder {
             do! merryTests user1Id user2Id
