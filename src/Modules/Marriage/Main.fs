@@ -174,6 +174,7 @@ let rec reduce (msg: Msg) (state: State): State =
 
         let response (b: Entities.DiscordMessageBuilder) =
             let b = Entities.DiscordInteractionResponseBuilder(b)
+            b.AddMentions(Entities.Mentions.All) |> ignore
             let typ =
                 InteractionResponseType.ChannelMessageWithSource
             awaiti <| e.Interaction.CreateResponseAsync (typ, b)
@@ -209,6 +210,7 @@ let rec reduce (msg: Msg) (state: State): State =
     | RequestInteraction(client, e, act) ->
         let response (b: Entities.DiscordMessageBuilder) =
             let b = Entities.DiscordInteractionResponseBuilder(b)
+            b.AddMentions(Entities.Mentions.All) |> ignore
             let typ =
                 InteractionResponseType.UpdateMessage
             awaiti <| e.Interaction.CreateResponseAsync (typ, b)
@@ -219,6 +221,7 @@ let rec reduce (msg: Msg) (state: State): State =
 
             let typ =
                 InteractionResponseType.ChannelMessageWithSource
+
             awaiti <| e.Interaction.CreateResponseAsync (typ, b)
 
         let getMemberAsync userId =
