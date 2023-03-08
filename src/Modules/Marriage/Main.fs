@@ -416,11 +416,11 @@ let create db =
                     m.Post(RequestSlashCommand(e, Divorce))
             |}
 
-        let status =
-            let slashCommandName = "status"
+        let statusSlash =
+            let commandName = "status"
             let targetOptionName = "target"
             InteractionCommand.SlashCommand {|
-                CommandName = slashCommandName
+                CommandName = commandName
                 Command =
                     let targetOption =
                         Entities.DiscordApplicationCommandOption(
@@ -434,7 +434,7 @@ let create db =
                         )
 
                     new Entities.DiscordApplicationCommand(
-                        slashCommandName,
+                        commandName,
                         "Узнать семейное положение свое или указанного пользователя",
                         ``type`` = ApplicationCommandType.SlashCommand,
                         options = [
@@ -463,11 +463,33 @@ let create db =
                     let targetId = getTargetId ()
                     m.Post(RequestSlashCommand(e, Status targetId))
             |}
+
+        let statusMenu =
+            let commandName = "status"
+            InteractionCommand.CommandMenu {|
+                CommandName = commandName
+                Command =
+                    new Entities.DiscordApplicationCommand(
+                        commandName,
+                        null,
+                        ``type`` = ApplicationCommandType.UserContextMenu,
+                        name_localizations = Map [
+                            "ru", "статус"
+                        ]
+                    )
+                Handler = fun e ->
+                    let getTargetId () =
+                        Some e.TargetUser.Id
+
+                    let targetId = getTargetId ()
+                    m.Post(RequestSlashCommand(e, Status targetId))
+            |}
         [|
             marry
             getMarried
             divorce
-            status
+            statusSlash
+            statusMenu
         |]
 
     let componentInteractionCreateHandler (client: DiscordClient, e: EventArgs.ComponentInteractionCreateEventArgs) =
