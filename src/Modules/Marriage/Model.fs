@@ -6,14 +6,14 @@ open MongoDB.Bson
 open Types
 open Db
 
-type Builder() =
+type PipeBackwardBuilder() =
     member __.Bind (f, next) =
         f next
 
     member __.Return x =
         x
 
-let builder = Builder()
+let pipeBackwardBuilder = PipeBackwardBuilder()
 
 type Req<'Arg, 'Res, 'Next> = 'Arg * ('Res -> 'Next)
 
@@ -168,7 +168,7 @@ module MarriageCmd =
         CreateConformation2View(state, next)
 
 let getSpouse userId =
-    builder {
+    pipeBackwardBuilder {
         let! spouse = MarriageCmd.apply MarriedCouplesCmd.getSpouse userId
         match spouse with
         | Some user2Id ->
@@ -180,7 +180,7 @@ let getSpouse userId =
     }
 
 let divorce userId =
-    builder {
+    pipeBackwardBuilder {
         let! spouse = MarriageCmd.apply MarriedCouplesCmd.divorce userId
         match spouse with
         | Some user2Id ->
@@ -193,7 +193,7 @@ let divorce userId =
 
 let merryTests user1Id user2Id next =
     let testSelfMarried user1Id user2Id next =
-        builder {
+        pipeBackwardBuilder {
             if user1Id = user2Id then
                 do! "Нельзя обручиться с самим собой!" |> MarriageCmd.print true
                 return End
@@ -202,7 +202,7 @@ let merryTests user1Id user2Id next =
         }
 
     let testIsMarried userId next =
-        builder {
+        pipeBackwardBuilder {
             let! spouse =
                 MarriageCmd.apply MarriedCouplesCmd.getSpouse userId
 
@@ -215,7 +215,7 @@ let merryTests user1Id user2Id next =
         }
 
     let testUserIsBot user2Id next =
-        builder {
+        pipeBackwardBuilder {
             let! isBot =
                 MarriageCmd.userIsBot user2Id
 
@@ -226,7 +226,7 @@ let merryTests user1Id user2Id next =
                 return next ()
         }
 
-    builder {
+    pipeBackwardBuilder {
         do! testSelfMarried user1Id user2Id
         do! testUserIsBot user2Id
         do! testIsMarried user1Id
@@ -236,7 +236,7 @@ let merryTests user1Id user2Id next =
 
 let merry user1Id user2Id =
     let merry () next =
-        builder {
+        pipeBackwardBuilder {
             let! res =
                 MarriageCmd.apply MarriedCouplesCmd.merry (user1Id, user2Id)
             match res with
@@ -247,7 +247,7 @@ let merry user1Id user2Id =
                 return End
         }
 
-    builder {
+    pipeBackwardBuilder {
         do! merryTests user1Id user2Id
         do! merry ()
         do! sprintf "Объявляю вас парой носков! Можете обменяться нитками." |> MarriageCmd.print false
@@ -255,7 +255,7 @@ let merry user1Id user2Id =
     }
 
 let startGetMerry user1Id user2Id =
-    builder {
+    pipeBackwardBuilder {
         do! merryTests user1Id user2Id
         do! MarriageCmd.createConformationView user1Id user2Id
         return End
@@ -267,7 +267,7 @@ let startMerry ({ MatchmakerId = matchmakerId; User1Id = user1Id; User2Id = user
     elif matchmakerId = user2Id then
         startGetMerry user2Id user1Id
     else
-        builder {
+        pipeBackwardBuilder {
             do! merryTests user1Id user2Id
             do! MarriageCmd.createConformation2View (MerryConformation2State.ofMerryArgs args)
             return End
@@ -277,7 +277,7 @@ let confirm2Merry isAgree (currentUserId: UserId) (internalState: MerryConformat
     let testCurrentUserIsValid currentUserId next =
         let test (userId, userStatus) next =
             if isAgree then
-                builder {
+                pipeBackwardBuilder {
                     match userStatus with
                     | MerryConformation2Status.Unknown
                     | MerryConformation2Status.Disagree ->
@@ -288,7 +288,7 @@ let confirm2Merry isAgree (currentUserId: UserId) (internalState: MerryConformat
                         return End
                 }
             else
-                builder {
+                pipeBackwardBuilder {
                     match userStatus with
                     | MerryConformation2Status.Unknown
                     | MerryConformation2Status.Agree ->
@@ -299,7 +299,7 @@ let confirm2Merry isAgree (currentUserId: UserId) (internalState: MerryConformat
                         return End
                 }
 
-        builder {
+        pipeBackwardBuilder {
             let {
                 MatchmakerId = matchmakerId
                 User1Status = user1Id, user1Status
@@ -326,7 +326,7 @@ let confirm2Merry isAgree (currentUserId: UserId) (internalState: MerryConformat
                 return End
         }
 
-    builder {
+    pipeBackwardBuilder {
         let! {
             MatchmakerId = matchmakerId
             User1Status = user1Id, user1Status

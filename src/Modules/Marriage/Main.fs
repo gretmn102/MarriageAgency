@@ -542,7 +542,7 @@ let create db =
                         else
                             next ()
 
-                    Model.builder {
+                    Model.pipeBackwardBuilder {
                         do! handle (MerryConformationView.viewId, MerryConformationView.handle, ConformationViewAction)
                         do! handle (MerryConformation2View.viewId, MerryConformation2View.handle, ConformationView2Action)
                     }
