@@ -11,7 +11,7 @@ NUGET
       MongoDB.Driver (>= 2.13.2)
       SixLabors.ImageSharp (>= 1.0.4)
       SixLabors.ImageSharp.Drawing (>= 1.0.0-beta13)
-    FSharpMyExt (1.9.0)
+    FSharpMyExt (1.11.0)
       FParsec (>= 1.1.1)
       FSharp.Core (>= 4.7.2)
       Fuchu (>= 1.1)

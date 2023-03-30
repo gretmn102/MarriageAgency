@@ -6,15 +6,6 @@ open MongoDB.Bson
 open Types
 open Db
 
-type PipeBackwardBuilder() =
-    member __.Bind (f, next) =
-        f next
-
-    member __.Return x =
-        x
-
-let pipeBackwardBuilder = PipeBackwardBuilder()
-
 type Req<'Arg, 'Res, 'Next> = 'Arg * ('Res -> 'Next)
 
 type MarriedCouplesCmd<'Next> =
