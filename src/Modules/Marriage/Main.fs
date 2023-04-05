@@ -102,6 +102,44 @@ module Interaction =
                 FParsecExt.runResultAt (pdata: 'Data Parser) index str
                 |> Result.map fst
 
+            module Builder =
+                open FSharp.Core
+
+                let parseFormId handleError input next =
+                    match parseHeader input with
+                    | Some pos ->
+                        match parseFormId pos input with
+                        | Ok (formId, pos2) ->
+                            next (formId, pos + pos2)
+
+                        | Error errMsg ->
+                            handleError errMsg
+
+                        true
+                    | None ->
+                        false
+
+                let parseComponentId handleError (pos, input) next =
+                    match parseComponentId pos input with
+                    | Ok (componentId, pos2) ->
+                        next (componentId, pos + pos2)
+                    | Error errMsg ->
+                        handleError errMsg
+
+                let inline handle formId rawComponentId postAction handleError (pos, input) (viewId, handle, action) next =
+                    if formId = viewId then
+                        let componentId = enum<_> rawComponentId
+                        let parseData pdata =
+                            parseData pdata pos input
+
+                        match handle componentId parseData with
+                        | Ok x ->
+                            postAction (action x)
+                        | Error errMsg ->
+                            handleError errMsg
+                    else
+                        next ()
+
 type State =
     {
         MarriedCouples: Model.MarriedCouples.GuildData
@@ -493,6 +531,12 @@ let create db =
         |]
 
     let componentInteractionCreateHandler (client: DiscordClient, e: EventArgs.ComponentInteractionCreateEventArgs) =
+        let testIsMessageBelongToBot () next =
+            if e.Message.Author.Id = client.CurrentUser.Id then
+                next ()
+            else
+                false
+
         let restartComponent errMsg =
             try
                 DiscordMessage.Ext.clearComponents e.Message
@@ -510,54 +554,27 @@ let create db =
             b.IsEphemeral <- true
             awaiti <| e.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, b)
 
-        let isMessageBelongToBot () next =
-            if e.Message.Author.Id = client.CurrentUser.Id then
-                next ()
-            else
-                false
+        pipeBackwardBuilder {
+            do! testIsMessageBelongToBot ()
 
-        isMessageBelongToBot () <| fun () ->
+            let input = e.Id
 
-        let customId = e.Id
-        match Interaction.ComponentState.Parser.parseHeader customId with
-        | Some pos ->
-            match Interaction.ComponentState.Parser.parseFormId pos customId with
-            | Ok (formId, pos2) ->
-                match Interaction.ComponentState.Parser.parseComponentId (pos + pos2) customId with
-                | Ok (componentId, pos3) ->
-                    let parseData pdata =
-                        Interaction.ComponentState.Parser.parseData pdata (pos + pos2 + pos3) customId
+            let! formId, pos =
+                Interaction.ComponentState.Parser.Builder.parseFormId restartComponent input
+            let! rawComponentId, pos =
+                Interaction.ComponentState.Parser.Builder.parseComponentId restartComponent (pos, input)
+            let inline handle cmd =
+                Interaction.ComponentState.Parser.Builder.handle
+                    formId
+                    rawComponentId
+                    (fun viewAction -> RequestInteraction(client, e, viewAction) |> m.Post)
+                    restartComponent
+                    (pos, input)
+                    cmd
 
-                    let inline handle (viewId, handle, action) next =
-                        let componentId = enum<_> componentId
-                        if formId = viewId then
-                            match handle componentId parseData with
-                            | Ok x ->
-                                RequestInteraction (client, e, action x)
-                                |> m.Post
-
-                            | Error errMsg ->
-                                errMsg
-                                |> restartComponent
-                        else
-                            next ()
-
-                    pipeBackwardBuilder {
-                        do! handle (MerryConformationView.viewId, MerryConformationView.handle, ConformationViewAction)
-                        do! handle (MerryConformation2View.viewId, MerryConformation2View.handle, ConformationView2Action)
-                    }
-
-                | Error(errMsg) ->
-                    errMsg
-                    |> restartComponent
-
-            | Error errMsg ->
-                errMsg
-                |> restartComponent
-
-            true
-        | None ->
-            false
+            do! handle (MerryConformationView.viewId, MerryConformationView.handle, ConformationViewAction)
+            do! handle (MerryConformation2View.viewId, MerryConformation2View.handle, ConformationView2Action)
+        }
 
     { Shared.BotModule.empty with
         InteractionCommands =
