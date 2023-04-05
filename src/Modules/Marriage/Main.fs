@@ -140,6 +140,34 @@ module Interaction =
                     else
                         next ()
 
+        let create actions handleAction restartComponent input =
+            let f formId rawComponentId (pos, input: string) next =
+                let handleActions formId rawComponentId str =
+                    match Map.tryFind formId actions with
+                    | Some parse ->
+                        parse rawComponentId str
+                    | None ->
+                        sprintf "Not found '%A' form" formId
+                        |> Error
+
+                let rawState = input.[pos..]
+                match handleActions formId rawComponentId rawState with
+                | Ok x ->
+                    next x
+                | Error x ->
+                    restartComponent x
+
+            pipeBackwardBuilder {
+                let! formId, pos =
+                    Parser.Builder.parseFormId restartComponent input
+                let! rawComponentId, pos =
+                    Parser.Builder.parseComponentId restartComponent (pos, input)
+                let! action = f formId rawComponentId (pos, input)
+                handleAction action
+
+                return ()
+            }
+
 type State =
     {
         MarriedCouples: Model.MarriedCouples.GuildData
