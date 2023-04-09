@@ -34,41 +34,6 @@ module Test =
 
 module Interaction =
     module ComponentState =
-        module Parser =
-
-            open Marriage.Main.Interaction.ComponentState.Parser
-
-            [<Tests>]
-            let componentStateParserTests =
-                testList "componentStateParserTests" [
-                    testCase "base" <| fun () ->
-                        let input =
-                            [
-                                "cid"
-                                "merryConformationId"
-                                "0"
-                                "796931557898088448"
-                                "896279711369151361"
-                            ] |> String.concat "\n"
-
-                        let exp = true
-
-                        let act =
-                            match parse input with
-                            | Some(value) ->
-                                match value with
-                                | Ok(x, f) ->
-                                    let componentId: Marriage.Views.MerryConformationView.ComponentId = x.ComponentId
-                                    let x = f Marriage.Views.MerryConformationView.Pair.Parser.parse
-                                    true
-                                | Error(errorValue) ->
-                                    failwithf "%s" errorValue
-                            | None ->
-                                failwithf "1"
-
-                        Assert.Equal("", exp, act)
-                ]
-
         module FormsHandleTests =
             module Form1 =
                 open Extensions.Interaction

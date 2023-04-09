@@ -17,6 +17,23 @@ type ViewAction =
     | ConformationViewAction of MerryConformationView.Action
     | ConformationView2Action of MerryConformation2View.Action
 
+let viewActions =
+    let inline f handlers act componentId str =
+        let componentId = enum componentId
+        match Map.tryFind componentId handlers with
+        | Some parse ->
+            parse str
+        | None ->
+            sprintf "Not found '%A' ComponentId" componentId
+            |> Error
+        |> Result.map act
+
+    [
+        MerryConformationView.viewId, f MerryConformationView.handlers ConformationViewAction
+        MerryConformation2View.viewId, f MerryConformation2View.handlers ConformationView2Action
+    ]
+    |> Map.ofList
+
 type Msg =
     | RequestSlashCommand of EventArgs.InteractionCreateEventArgs * SlashCommand
     | RequestInteraction of DiscordClient * EventArgs.ComponentInteractionCreateEventArgs * ViewAction
@@ -59,32 +76,6 @@ module Interaction =
             let pcomponentId: int32 Parser =
                 pint32
 
-            let inline parseHeaders< ^ComponentId when ^ComponentId: enum<int32>> : {| FormId: string; ComponentId: ^ComponentId |} Parser =
-                pipe2
-                    (pformId .>> newline)
-                    (pint32 .>> newline)
-                    (fun formId componentId ->
-                        {|
-                            FormId = formId
-                            ComponentId = (enum< ^ComponentId> componentId)
-                        |}
-                    )
-
-            let inline parse (str: string) =
-                FParsecExt.runResult pheader str
-                |> ResultExt.toOption
-                |> Option.map (fun (res, pos) ->
-                    FParsecExt.runResultAt parseHeaders (int pos.Index) str
-                    |> Result.map (fun (res, pos2) ->
-                        let parseData pdata =
-                            FParsecExt.runResultAt (pdata: 'Data Parser) (int (pos.Index + pos2.Index)) str
-                            |> Result.map (fun (data, pos) ->
-                                data
-                            )
-                        res, parseData
-                    )
-                )
-
             let parseHeader str =
                 FParsecExt.runResult pheader str
                 |> Result.map (snd >> fun pos -> int pos.Index)
@@ -125,20 +116,6 @@ module Interaction =
                         next (componentId, pos + pos2)
                     | Error errMsg ->
                         handleError errMsg
-
-                let inline handle formId rawComponentId postAction handleError (pos, input) (viewId, handle, action) next =
-                    if formId = viewId then
-                        let componentId = enum<_> rawComponentId
-                        let parseData pdata =
-                            parseData pdata pos input
-
-                        match handle componentId parseData with
-                        | Ok x ->
-                            postAction (action x)
-                        | Error errMsg ->
-                            handleError errMsg
-                    else
-                        next ()
 
         let create actions handleAction restartComponent input =
             let f formId rawComponentId (pos, input: string) next =
@@ -587,21 +564,14 @@ let create db =
 
             let input = e.Id
 
-            let! formId, pos =
-                Interaction.ComponentState.Parser.Builder.parseFormId restartComponent input
-            let! rawComponentId, pos =
-                Interaction.ComponentState.Parser.Builder.parseComponentId restartComponent (pos, input)
-            let inline handle cmd =
-                Interaction.ComponentState.Parser.Builder.handle
-                    formId
-                    rawComponentId
+            let isHandled =
+                Interaction.ComponentState.create
+                    viewActions
                     (fun viewAction -> RequestInteraction(client, e, viewAction) |> m.Post)
                     restartComponent
-                    (pos, input)
-                    cmd
+                    input
 
-            do! handle (MerryConformationView.viewId, MerryConformationView.handle, ConformationViewAction)
-            do! handle (MerryConformation2View.viewId, MerryConformation2View.handle, ConformationView2Action)
+            return isHandled
         }
 
     { Shared.BotModule.empty with

@@ -127,6 +127,9 @@ module MerryConformation2State =
                 parseUserIdState
                 create
 
+    let deserialize =
+        FParsecExt.runResult Parser.parse
+
 type MarriageCmd =
     | MarriedCouplesCm of MarriedCouplesCmd<MarriageCmd>
     | Print of Req<{| IsEphemeral: bool; Description: string |}, unit, MarriageCmd>

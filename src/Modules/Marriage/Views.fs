@@ -1,5 +1,6 @@
 module Marriage.Views
 open DSharpPlus
+open FsharpMyExtension
 
 open Extensions.Interaction
 open Types
@@ -51,45 +52,28 @@ module MerryConformationView =
                     puint64
                     create
 
+        let deserialize =
+            FParsecExt.runResult Parser.parse
+
     type Action =
         | ConfirmMerry of Pair
         | CancelMerry of Pair
 
-    type Handler =
-        | ConfirmButtonHandler of DataParserHandler<Pair, Action>
-        | CancelButtonHandler of DataParserHandler<Pair, Action>
+    let handlers: Map<ComponentId, string -> Result<Action, string>> =
+        let f deserialize handle str =
+            match deserialize str with
+            | Ok x ->
+                Ok (handle x)
 
-    let handlers: Map<ComponentId, Handler> =
+            | Error(errorValue) ->
+                sprintf "Views.MerryConformationView\n%s" errorValue
+                |> Error
+
         [
-            ComponentId.ConfirmButton, ConfirmButtonHandler (Pair.Parser.parse, ConfirmMerry)
-            ComponentId.CancelButton, CancelButtonHandler (Pair.Parser.parse, CancelMerry)
+            ComponentId.ConfirmButton, f Pair.deserialize ConfirmMerry
+            ComponentId.CancelButton, f Pair.deserialize CancelMerry
         ]
         |> Map.ofList
-
-    let handle componentId parseData =
-        match Map.tryFind componentId handlers with
-        | Some x ->
-            match x with
-            | ConfirmButtonHandler (parser, handle) ->
-                match parseData parser with
-                | Ok x ->
-                    Ok (handle x)
-
-                | Error(errorValue) ->
-                    sprintf "Views.MerryConformationView.Handler.ConfirmButtonHandler\n%s" errorValue
-                    |> Error
-
-            | CancelButtonHandler (parser, handle) ->
-                match parseData parser with
-                | Ok x ->
-                    Ok (handle x)
-
-                | Error(errorValue) ->
-                    sprintf "Views.MerryConformationView.Handler.CancelButtonHandler\n%s" errorValue
-                    |> Error
-        | None ->
-            sprintf "Not found '%A' ComponentId" componentId
-            |> Error
 
     let conformationView (authorId: UserId) (targetUserId: UserId) =
         let b = Entities.DiscordMessageBuilder()
@@ -143,41 +127,21 @@ module MerryConformation2View =
         | ConfirmButton = 0
         | CancelButton = 1
 
-    type Handler =
-        | ConfirmButtonHandler of DataParserHandler<MerryConformation2State, Action>
-        | CancelButtonHandler of DataParserHandler<MerryConformation2State, Action>
+    let handlers: Map<ComponentId, string -> Result<Action, string>> =
+        let f deserialize handle str =
+            match deserialize str with
+            | Ok x ->
+                Ok (handle x)
 
-    let handlers: Map<ComponentId, Handler> =
+            | Error(errorValue) ->
+                sprintf "Views.MerryConformation2View\n%s" errorValue
+                |> Error
+
         [
-            ComponentId.ConfirmButton, ConfirmButtonHandler (MerryConformation2State.Parser.parse, ConfirmMerry)
-            ComponentId.CancelButton, CancelButtonHandler (MerryConformation2State.Parser.parse, CancelMerry)
+            ComponentId.ConfirmButton, f MerryConformation2State.deserialize ConfirmMerry
+            ComponentId.CancelButton, f MerryConformation2State.deserialize CancelMerry
         ]
         |> Map.ofList
-
-    let handle componentId parseData =
-        match Map.tryFind componentId handlers with
-        | Some x ->
-            match x with
-            | ConfirmButtonHandler (parser, handle) ->
-                match parseData parser with
-                | Ok x ->
-                    Ok (handle x)
-
-                | Error(errorValue) ->
-                    sprintf "Views.MerryConformationView.Handler.ConfirmButtonHandler\n%s" errorValue
-                    |> Error
-
-            | CancelButtonHandler (parser, handle) ->
-                match parseData parser with
-                | Ok x ->
-                    Ok (handle x)
-
-                | Error(errorValue) ->
-                    sprintf "Views.MerryConformationView.Handler.CancelButtonHandler\n%s" errorValue
-                    |> Error
-        | None ->
-            sprintf "Not found '%A' ComponentId" componentId
-            |> Error
 
     let create ({ MatchmakerId = matchmakerId; User1Status = user1Id, user1Status; User2Status = user2Id, user2Status } as state : MerryConformation2State) =
         let b = Entities.DiscordMessageBuilder()
