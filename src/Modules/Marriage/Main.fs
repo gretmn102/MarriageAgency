@@ -442,6 +442,24 @@ let create db =
                     m.Post(RequestSlashCommand(e, GetMarried targetId))
             |}
 
+        let getMarriedMenu =
+            let commandName = "get-married"
+            InteractionCommand.CommandMenu {|
+                CommandName = commandName
+                Command =
+                    new Entities.DiscordApplicationCommand(
+                        commandName,
+                        null,
+                        ``type`` = ApplicationCommandType.UserContextMenu,
+                        name_localizations = Map [
+                            "ru", "обвенчаться"
+                        ]
+                    )
+                Handler = fun e ->
+                    let targetId = e.TargetUser.Id
+                    m.Post(RequestSlashCommand(e, GetMarried targetId))
+            |}
+
         let divorce =
             let slashCommandName = "divorce"
             InteractionCommand.SlashCommand {|
@@ -530,6 +548,7 @@ let create db =
         [|
             marry
             getMarried
+            getMarriedMenu
             divorce
             statusSlash
             statusMenu
