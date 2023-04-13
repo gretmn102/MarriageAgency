@@ -2,38 +2,6 @@ open Fuchu
 open FsharpMyExtension
 open FsharpMyExtension.Either
 
-module Json =
-    let tryDes x =
-        try
-            Json.des x |> Ok
-        with e ->
-            Error e.Message
-
-module Test =
-    open FParsec
-
-    open Marriage.Main.FParsecExt
-
-    [<Tests>]
-    let runResultAtTests =
-        testList "runParserOnSubstringStartTests" [
-            testCase "base" <| fun () ->
-                let str = "ab\nc"
-
-                let exp = Result.Ok "c"
-
-                let act =
-                    runParserOnSubstringStart (pstring "ab" .>> newline) 0 str
-                    |> ParserResult.toResult
-                    |> Result.bind (fun (res, _, pos) ->
-                        runParserOnSubstringStart (pstring "c") (int pos.Index) str
-                        |> ParserResult.toResult
-                    )
-                    |> Result.map (fun (res, _, _) -> res)
-
-                Assert.Equal("", exp, act)
-        ]
-
 module Interaction =
     module ComponentState =
         module FormsHandleTests =

@@ -38,28 +38,12 @@ type Msg =
     | RequestSlashCommand of EventArgs.InteractionCreateEventArgs * SlashCommand
     | RequestInteraction of DiscordClient * EventArgs.ComponentInteractionCreateEventArgs * ViewAction
 
-module FParsecExt =
-    open FParsec
-
-    module ParserResult =
-        let toResult (parserResult: ParserResult<_,_>) =
-            match parserResult with
-            | Success(res, userState, pos) -> Result.Ok (res, userState, pos)
-            | Failure(errMsg, parserError, userState) -> Result.Error (errMsg, parserError, userState)
-
-    let runParserOnSubstringStart p startIndex str =
-        runParserOnSubstring p () "" str startIndex (str.Length - startIndex)
-
-module ResultExt =
-    let toOption = function
-        | Ok x -> Some x
-        | Error _ -> None
-
 module Interaction =
     module ComponentState =
         module Parser =
             open FParsec
             open FParsecExt
+            open FsharpMyExtension.ResultExt
 
             open Extensions.Interaction
             open Extensions.Interaction.ComponentState.Parser
@@ -78,7 +62,7 @@ module Interaction =
                 run pheader str
                 |> ParserResult.toResult
                 |> Result.map (fun (_, _, pos) -> int pos.Index)
-                |> ResultExt.toOption
+                |> Result.toOption
 
             let parseFormId (index: int) str =
                 runParserOnSubstringStart (pformId .>> newline) index str
