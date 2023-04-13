@@ -5,10 +5,6 @@ open FsharpMyExtension
 open Extensions.Interaction
 open Types
 
-type Handler<'Data, 'Action> = 'Data -> 'Action
-type DataParser<'Data> = FParsec.Primitives.Parser<'Data, unit>
-type DataParserHandler<'Data, 'Action> = DataParser<'Data> * Handler<'Data, 'Action>
-
 module MerryResultView =
     let view str =
         let b = Entities.DiscordMessageBuilder()
