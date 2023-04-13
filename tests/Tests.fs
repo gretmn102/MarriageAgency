@@ -12,22 +12,24 @@ module Json =
 module Test =
     open FParsec
 
-    open Marriage.Main
+    open Marriage.Main.FParsecExt
 
     [<Tests>]
     let runResultAtTests =
-        testList "runResultAtTests" [
+        testList "runParserOnSubstringStartTests" [
             testCase "base" <| fun () ->
                 let str = "ab\nc"
 
                 let exp = Result.Ok "c"
 
                 let act =
-                    FParsecExt.runResultAt (pstring "ab" .>> newline) 0 str
-                    |> Result.bind (fun (res, pos) ->
-                        FParsecExt.runResultAt (pstring "c") (int pos.Index) str
+                    runParserOnSubstringStart (pstring "ab" .>> newline) 0 str
+                    |> ParserResult.toResult
+                    |> Result.bind (fun (res, _, pos) ->
+                        runParserOnSubstringStart (pstring "c") (int pos.Index) str
+                        |> ParserResult.toResult
                     )
-                    |> Result.map fst
+                    |> Result.map (fun (res, _, _) -> res)
 
                 Assert.Equal("", exp, act)
         ]

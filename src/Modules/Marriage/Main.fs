@@ -41,17 +41,14 @@ type Msg =
 module FParsecExt =
     open FParsec
 
-    let runResult p str =
-        match run p str with
-        | Success(res, _, pos) -> Result.Ok (res, pos)
-        | Failure(errMsg, _, _) -> Result.Error errMsg
+    module ParserResult =
+        let toResult (parserResult: ParserResult<_,_>) =
+            match parserResult with
+            | Success(res, userState, pos) -> Result.Ok (res, userState, pos)
+            | Failure(errMsg, parserError, userState) -> Result.Error (errMsg, parserError, userState)
 
-    let runResultAt p startIndex str =
-        match runParserOnSubstring p () "" str startIndex (str.Length - startIndex) with
-        | Success(data, _, pos) ->
-            Result.Ok (data, pos)
-        | Failure(errMsg, _, _) ->
-            Result.Error errMsg
+    let runParserOnSubstringStart p startIndex str =
+        runParserOnSubstring p () "" str startIndex (str.Length - startIndex)
 
 module ResultExt =
     let toOption = function
@@ -62,6 +59,7 @@ module Interaction =
     module ComponentState =
         module Parser =
             open FParsec
+            open FParsecExt
 
             open Extensions.Interaction
             open Extensions.Interaction.ComponentState.Parser
@@ -77,21 +75,25 @@ module Interaction =
                 pint32
 
             let parseHeader str =
-                FParsecExt.runResult pheader str
-                |> Result.map (snd >> fun pos -> int pos.Index)
+                run pheader str
+                |> ParserResult.toResult
+                |> Result.map (fun (_, _, pos) -> int pos.Index)
                 |> ResultExt.toOption
 
             let parseFormId (index: int) str =
-                FParsecExt.runResultAt (pformId .>> newline) index str
-                |> Result.map (mapSnd (fun pos -> int pos.Index))
+                runParserOnSubstringStart (pformId .>> newline) index str
+                |> ParserResult.toResult
+                |> Result.map (fun (res, _, pos) -> res, int pos.Index)
 
             let parseComponentId (index: int) str =
-                FParsecExt.runResultAt (pcomponentId .>> newline) index str
-                |> Result.map (mapSnd (fun pos -> int pos.Index))
+                runParserOnSubstringStart (pcomponentId .>> newline) index str
+                |> ParserResult.toResult
+                |> Result.map (fun (res, _, pos) -> res, int pos.Index)
 
             let parseData (pdata: 'Data Parser) (index: int) str =
-                FParsecExt.runResultAt (pdata: 'Data Parser) index str
-                |> Result.map fst
+                runParserOnSubstringStart pdata index str
+                |> ParserResult.toResult
+                |> Result.map (fun (res, _, _) -> res)
 
             module Builder =
                 open FSharp.Core
@@ -103,7 +105,7 @@ module Interaction =
                         | Ok (formId, pos2) ->
                             next (formId, pos + pos2)
 
-                        | Error errMsg ->
+                        | Error (errMsg, _, _) ->
                             handleError errMsg
 
                         true
@@ -114,7 +116,7 @@ module Interaction =
                     match parseComponentId pos input with
                     | Ok (componentId, pos2) ->
                         next (componentId, pos + pos2)
-                    | Error errMsg ->
+                    | Error (errMsg, _, _) ->
                         handleError errMsg
 
         let create actions handleAction restartComponent input =
