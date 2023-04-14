@@ -360,10 +360,13 @@ let create db =
                 Command =
                     new Entities.DiscordApplicationCommand(
                         slashCommandName,
-                        "Развестись со своим носком",
+                        "Divorce your spouse",
                         ``type`` = ApplicationCommandType.SlashCommand,
                         name_localizations = Map [
                             "ru", "развестись"
+                        ],
+                        description_localizations = Map [
+                            "ru", "Развестись со своим носком"
                         ]
                     )
                 Handler = fun e ->
@@ -493,12 +496,3 @@ let create db =
         ComponentInteractionCreateHandle =
             Some componentInteractionCreateHandler
     }
-
-let commandDescriptions =
-    [
-        "get-married", "обвенчаться с другим носком"
-        "marry", "обвенчать двух носков (с их согласия, конечно же)"
-        "divorce", "развестись"
-        "status", "посмотреть свой статус или другого носка"
-    ]
-    |> Map.ofList
