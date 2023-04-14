@@ -493,3 +493,12 @@ let create db =
         ComponentInteractionCreateHandle =
             Some componentInteractionCreateHandler
     }
+
+let commandDescriptions =
+    [
+        "get-married", "обвенчаться с другим носком"
+        "marry", "обвенчать двух носков (с их согласия, конечно же)"
+        "divorce", "развестись"
+        "status", "посмотреть свой статус или другого носка"
+    ]
+    |> Map.ofList

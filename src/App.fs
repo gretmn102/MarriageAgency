@@ -86,7 +86,38 @@ let main argv =
     |> Shared.BotModule.bindToClientsEvents
         prefix
         (fun client e ->
-            ()
+            let commands =
+                await <| client.GetGlobalApplicationCommandsAsync()
+
+            let commands =
+                commands
+                |> Seq.choose (fun x ->
+                    if x.Type = DSharpPlus.ApplicationCommandType.SlashCommand then
+                        let commandName = x.Name
+                        Map.tryFind commandName Marriage.Main.commandDescriptions
+                        |> Option.map(fun description ->
+                            {|
+                                Id = x.Id
+                                Name = commandName
+                                Description = description
+                            |}
+                        )
+                    else
+                        None
+                )
+                |> Seq.map (fun x ->
+                    sprintf "• </%s:%d> — %s" x.Name x.Id x.Description
+                )
+                |> String.concat "\n"
+
+            let embed = DSharpPlus.Entities.DiscordEmbedBuilder()
+            embed.Color <- DiscordEmbed.backgroundColorDarkTheme
+            embed.Description <-
+                [
+                    "Доступные команды:"
+                    commands
+                ] |> String.concat "\n"
+            awaiti <| e.Channel.SendMessageAsync embed
         )
         (fun client e ->
             ()
