@@ -108,40 +108,42 @@ let rec reduce (msg: Msg) (state: State): State =
         let user1Id = e.Interaction.User.Id
         let guildId = e.Interaction.Guild.Id
 
-        let response (b: Entities.DiscordMessageBuilder) =
-            let b = Entities.DiscordInteractionResponseBuilder(b)
-            b.AddMentions(Entities.Mentions.All) |> ignore
-            let typ =
-                InteractionResponseType.ChannelMessageWithSource
-            awaiti <| e.Interaction.CreateResponseAsync (typ, b)
+        let interp =
+            let response (b: Entities.DiscordMessageBuilder) =
+                let b = Entities.DiscordInteractionResponseBuilder(b)
+                b.AddMentions(Entities.Mentions.All) |> ignore
+                let typ =
+                    InteractionResponseType.ChannelMessageWithSource
+                awaiti <| e.Interaction.CreateResponseAsync (typ, b)
 
-        let responseEphemeral (b: Entities.DiscordMessageBuilder) =
-            let b = Entities.DiscordInteractionResponseBuilder(b)
-            b.IsEphemeral <- true
+            let responseEphemeral (b: Entities.DiscordMessageBuilder) =
+                let b = Entities.DiscordInteractionResponseBuilder(b)
+                b.IsEphemeral <- true
+                let typ =
+                    InteractionResponseType.ChannelMessageWithSource
+                awaiti <| e.Interaction.CreateResponseAsync (typ, b)
 
-            let typ =
-                InteractionResponseType.ChannelMessageWithSource
-            awaiti <| e.Interaction.CreateResponseAsync (typ, b)
+            let getMemberAsync userId =
+                e.Interaction.Guild.GetMemberAsync userId
 
-        let getMemberAsync userId =
-            e.Interaction.Guild.GetMemberAsync userId
+            interp guildId response responseEphemeral getMemberAsync
 
         match act with
         | GetMarried user2Id ->
-            interp guildId response responseEphemeral getMemberAsync (Model.startGetMerry user1Id user2Id) state
+            interp (Model.startGetMerry user1Id user2Id) state
 
         | Divorce ->
-            interp guildId response responseEphemeral getMemberAsync (Model.divorce user1Id) state
+            interp (Model.divorce user1Id) state
 
         | Status targetUserId ->
             let targetUserId =
                 targetUserId
                 |> Option.defaultValue user1Id
 
-            interp guildId response responseEphemeral getMemberAsync (Model.getSpouse targetUserId) state
+            interp (Model.getSpouse targetUserId) state
 
         | Merry args  ->
-            interp guildId response responseEphemeral getMemberAsync (Model.startMerry args) state
+            interp (Model.startMerry args) state
 
     | RequestInteraction(client, e, act) ->
         let response (b: Entities.DiscordMessageBuilder) =
@@ -168,13 +170,16 @@ let rec reduce (msg: Msg) (state: State): State =
             b.Content <- sprintf "На эту кнопку должен нажать <@%d>." targetUserId
             responseEphemeral b
 
+        let interp =
+            let guildId = e.Guild.Id
+            interp guildId response responseEphemeral getMemberAsync
+
         match act with
         | ConformationViewAction act ->
             match act with
             | MerryConformationView.ConfirmMerry pair ->
-                let guildId = e.Guild.Id
                 if e.User.Id = pair.TargetUserId then
-                    interp guildId response responseEphemeral getMemberAsync (Model.merry pair.SourceUserId pair.TargetUserId) state
+                    interp (Model.merry pair.SourceUserId pair.TargetUserId) state
                 else
                     send pair.TargetUserId
 
@@ -192,14 +197,13 @@ let rec reduce (msg: Msg) (state: State): State =
 
         | ConformationView2Action act ->
             let userId = e.Interaction.User.Id
-            let guildId = e.Guild.Id
 
             match act with
             | MerryConformation2View.ConfirmMerry internalState ->
-                interp guildId response responseEphemeral getMemberAsync (Model.confirm2Merry true userId internalState) state
+                interp (Model.confirm2Merry true userId internalState) state
 
             | MerryConformation2View.CancelMerry internalState ->
-                interp guildId response responseEphemeral getMemberAsync (Model.confirm2Merry false userId internalState) state
+                interp (Model.confirm2Merry false userId internalState) state
 
 let create db =
     let m =
