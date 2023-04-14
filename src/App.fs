@@ -9,24 +9,6 @@ open Extensions
 
 let botEventId = new EventId(42, "Bot-Event")
 
-let cmd pstart (client: DSharpPlus.DiscordClient) (e: DSharpPlus.EventArgs.MessageCreateEventArgs) =
-    let authorId = e.Author.Id
-    let botId = client.CurrentUser.Id
-
-    if authorId <> botId then
-        match pstart botId e.Message.Content with
-        | Right res ->
-            match res with
-            | CommandParser.Pass -> ()
-
-            | CommandParser.Unknown -> ()
-
-            | CommandParser.MessageCreateEventHandler exec ->
-                exec (client, e)
-
-        | Left x ->
-            awaiti (client.SendMessageAsync (e.Channel, (sprintf "Ошибка:\n```\n%s\n```" x)))
-
 let initBotModules (db: MongoDB.Driver.IMongoDatabase) =
     [|
         Marriage.Main.create db
@@ -98,11 +80,17 @@ let main argv =
     let database = initDb ()
     let botModules = initBotModules database
 
+    let prefix = "."
+
     botModules
     |> Shared.BotModule.bindToClientsEvents
-        CommandParser.initCommandParser
-        CommandParser.start
-        cmd
+        prefix
+        (fun client e ->
+            ()
+        )
+        (fun client e ->
+            ()
+        )
         (fun _ _ -> ())
         client
 
