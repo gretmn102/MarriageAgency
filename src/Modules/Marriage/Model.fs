@@ -27,6 +27,39 @@ module MarriedCouplesCmd =
     let divorce userId next =
         Divorce(userId, next)
 
+type MerryConformationState =
+    {
+        SourceUserId: UserId
+        TargetUserId: UserId
+    }
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<RequireQualifiedAccess>]
+module MerryConformationState =
+    let create sourceUserId targetUserId =
+        {
+            SourceUserId = sourceUserId
+            TargetUserId = targetUserId
+        }
+
+    module Printer =
+        open FsharpMyExtension.ShowList
+
+        let showT (p: MerryConformationState) =
+            shows p.SourceUserId << nl
+            << shows p.TargetUserId
+
+    module Parser =
+        open FParsec
+
+        let parse<'UserState> : Parser<_, 'UserState> =
+            pipe2
+                (puint64 .>> newline)
+                puint64
+                create
+
+    let deserialize =
+        FParsecExt.runResult Parser.parse
+
 type MerryArgs =
     {
         MatchmakerId: UserId
@@ -134,7 +167,7 @@ type MarriageCmd =
     | MarriedCouplesCm of MarriedCouplesCmd<MarriageCmd>
     | Print of Req<{| IsEphemeral: bool; Description: string |}, unit, MarriageCmd>
     | UserIsBot of Req<UserId, bool, MarriageCmd>
-    | CreateConformationView of Req<UserId * UserId, unit, MarriageCmd>
+    | CreateConformationView of Req<MerryConformationState, unit, MarriageCmd>
     | CreateConformation2View of Req<MerryConformation2State, unit, MarriageCmd>
     | End
 
@@ -156,7 +189,7 @@ module MarriageCmd =
         UserIsBot(userId, next)
 
     let createConformationView user1Id user2Id next =
-        CreateConformationView((user1Id, user2Id), next)
+        CreateConformationView(MerryConformationState.create user1Id user2Id, next)
 
     let createConformation2View state next =
         CreateConformation2View(state, next)
@@ -266,6 +299,25 @@ let startMerry ({ MatchmakerId = matchmakerId; User1Id = user1Id; User2Id = user
             do! MarriageCmd.createConformation2View (MerryConformation2State.ofMerryArgs args)
             return End
         }
+
+let handleMerryConfirmation isAgree (currentUserId: UserId) (internalState: MerryConformationState) =
+    let {
+        TargetUserId = targetUserId
+    } = internalState
+
+    pipeBackwardBuilder {
+        if currentUserId = targetUserId then
+            if isAgree then
+                return merry internalState.SourceUserId targetUserId
+            else
+                do! sprintf "<@%d>, увы, но носок <@%d> тебе отказал." internalState.SourceUserId targetUserId
+                    |> MarriageCmd.print false
+                return End
+        else
+            do! sprintf "На эту кнопку должен нажать <@%d>!" targetUserId
+                |> MarriageCmd.print true
+            return End
+    }
 
 let confirm2Merry isAgree (currentUserId: UserId) (internalState: MerryConformation2State) =
     let testCurrentUserIsValid currentUserId next =

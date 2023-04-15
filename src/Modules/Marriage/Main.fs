@@ -69,8 +69,8 @@ let rec reduce (msg: Msg) (state: State): State =
                     }
                 interp req state
 
-            | Model.CreateConformationView((user1Id, user2Id), next) ->
-                MerryConformationView.conformationView user1Id user2Id
+            | Model.CreateConformationView(internalState, next) ->
+                MerryConformationView.conformationView internalState
                 |> response
 
                 interp (next ()) state
@@ -146,54 +146,43 @@ let rec reduce (msg: Msg) (state: State): State =
             interp (Model.startMerry args) state
 
     | RequestInteraction(client, e, act) ->
-        let response (b: Entities.DiscordMessageBuilder) =
-            let b = Entities.DiscordInteractionResponseBuilder(b)
-            b.AddMentions(Entities.Mentions.All) |> ignore
-            let typ =
-                InteractionResponseType.UpdateMessage
-            awaiti <| e.Interaction.CreateResponseAsync (typ, b)
-
-        let responseEphemeral (b: Entities.DiscordMessageBuilder) =
-            let b = Entities.DiscordInteractionResponseBuilder(b)
-            b.IsEphemeral <- true
-
-            let typ =
-                InteractionResponseType.ChannelMessageWithSource
-
-            awaiti <| e.Interaction.CreateResponseAsync (typ, b)
-
-        let getMemberAsync userId =
-            e.Interaction.Guild.GetMemberAsync userId
-
-        let send (targetUserId: UserId) =
-            let b = Entities.DiscordMessageBuilder()
-            b.Content <- sprintf "На эту кнопку должен нажать <@%d>." targetUserId
-            responseEphemeral b
-
         let interp =
+            let response (b: Entities.DiscordMessageBuilder) =
+                let b = Entities.DiscordInteractionResponseBuilder(b)
+                b.AddMentions(Entities.Mentions.All) |> ignore
+                let typ =
+                    InteractionResponseType.UpdateMessage
+                awaiti <| e.Interaction.CreateResponseAsync (typ, b)
+
+            let responseEphemeral (b: Entities.DiscordMessageBuilder) =
+                let b = Entities.DiscordInteractionResponseBuilder(b)
+                b.IsEphemeral <- true
+
+                let typ =
+                    InteractionResponseType.ChannelMessageWithSource
+
+                awaiti <| e.Interaction.CreateResponseAsync (typ, b)
+
+            let getMemberAsync userId =
+                e.Interaction.Guild.GetMemberAsync userId
+
             let guildId = e.Guild.Id
+
             interp guildId response responseEphemeral getMemberAsync
 
         match act with
         | ConformationViewAction act ->
-            match act with
-            | MerryConformationView.ConfirmMerry pair ->
-                if e.User.Id = pair.TargetUserId then
-                    interp (Model.merry pair.SourceUserId pair.TargetUserId) state
-                else
-                    send pair.TargetUserId
+            let userId = e.User.Id
 
-                    state
+            let internalState, isAgree =
+                match act with
+                | MerryConformationView.ConfirmMerry internalState ->
+                    internalState, true
 
-            | MerryConformationView.CancelMerry pair ->
-                if e.User.Id = pair.TargetUserId then
-                    let str = sprintf "<@%d>, увы, но носок <@%d> тебе отказал." pair.SourceUserId pair.TargetUserId
-                    MerryResultView.view str
-                    |> response
-                else
-                    send pair.TargetUserId
+                | MerryConformationView.CancelMerry internalState ->
+                    internalState, false
 
-                state
+            interp (Model.handleMerryConfirmation isAgree userId internalState) state
 
         | ConformationView2Action act ->
             let userId = e.Interaction.User.Id

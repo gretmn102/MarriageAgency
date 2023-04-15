@@ -12,48 +12,17 @@ module MerryResultView =
         b
 
 module MerryConformationView =
+    open Model
+
     let viewId = "merryConformationId"
 
     type ComponentId =
         | ConfirmButton = 0
         | CancelButton = 1
 
-    type Pair =
-        {
-            SourceUserId: UserId
-            TargetUserId: UserId
-        }
-    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-    [<RequireQualifiedAccess>]
-    module Pair =
-        let create sourceUserId targetUserId =
-            {
-                SourceUserId = sourceUserId
-                TargetUserId = targetUserId
-            }
-
-        module Printer =
-            open FsharpMyExtension.ShowList
-
-            let showT (p: Pair) =
-                shows p.SourceUserId << nl
-                << shows p.TargetUserId
-
-        module Parser =
-            open FParsec
-
-            let parse<'UserState> : Parser<_, 'UserState> =
-                pipe2
-                    (puint64 .>> newline)
-                    puint64
-                    create
-
-        let deserialize =
-            FParsecExt.runResult Parser.parse
-
     type Action =
-        | ConfirmMerry of Pair
-        | CancelMerry of Pair
+        | ConfirmMerry of MerryConformationState
+        | CancelMerry of MerryConformationState
 
     let handlers: Map<ComponentId, string -> Result<Action, string>> =
         let f deserialize handle str =
@@ -66,12 +35,17 @@ module MerryConformationView =
                 |> Error
 
         [
-            ComponentId.ConfirmButton, f Pair.deserialize ConfirmMerry
-            ComponentId.CancelButton, f Pair.deserialize CancelMerry
+            ComponentId.ConfirmButton, f MerryConformationState.deserialize ConfirmMerry
+            ComponentId.CancelButton, f MerryConformationState.deserialize CancelMerry
         ]
         |> Map.ofList
 
-    let conformationView (authorId: UserId) (targetUserId: UserId) =
+    let conformationView (internalState: MerryConformationState) =
+        let {
+            SourceUserId = authorId
+            TargetUserId = targetUserId
+        } = internalState
+
         let b = Entities.DiscordMessageBuilder()
 
         b.Content <-
@@ -84,10 +58,10 @@ module MerryConformationView =
                 ComponentState.create
                     viewId
                     ComponentId.ConfirmButton
-                    (Pair.create authorId targetUserId)
+                    (MerryConformationState.create authorId targetUserId)
             Entities.DiscordButtonComponent(
                 ButtonStyle.Primary,
-                ComponentState.serialize Pair.Printer.showT id,
+                ComponentState.serialize MerryConformationState.Printer.showT id,
                 "Согласиться!"
             )
 
@@ -96,10 +70,10 @@ module MerryConformationView =
                 ComponentState.create
                     viewId
                     ComponentId.CancelButton
-                    (Pair.create authorId targetUserId)
+                    (MerryConformationState.create authorId targetUserId)
             Entities.DiscordButtonComponent(
                 ButtonStyle.Danger,
-                ComponentState.serialize Pair.Printer.showT id,
+                ComponentState.serialize MerryConformationState.Printer.showT id,
                 "Отказать!"
             )
 
