@@ -174,25 +174,28 @@ let rec reduce (msg: Msg) (state: State): State =
         | ConformationViewAction act ->
             let userId = e.User.Id
 
-            let internalState, isAgree =
+            let isAgree, internalState =
                 match act with
                 | MerryConformationView.ConfirmMerry internalState ->
-                    internalState, true
+                    true, internalState
 
                 | MerryConformationView.CancelMerry internalState ->
-                    internalState, false
+                    false, internalState
 
             interp (Model.handleMerryConfirmation isAgree userId internalState) state
 
         | ConformationView2Action act ->
             let userId = e.Interaction.User.Id
 
-            match act with
-            | MerryConformation2View.ConfirmMerry internalState ->
-                interp (Model.handleMerry2Confirmation true userId internalState) state
+            let isAgree, internalState =
+                match act with
+                | MerryConformation2View.ConfirmMerry internalState ->
+                    true, internalState
 
-            | MerryConformation2View.CancelMerry internalState ->
-                interp (Model.handleMerry2Confirmation false userId internalState) state
+                | MerryConformation2View.CancelMerry internalState ->
+                    false, internalState
+
+            interp (Model.handleMerry2Confirmation isAgree userId internalState) state
 
 let create db =
     let m =
