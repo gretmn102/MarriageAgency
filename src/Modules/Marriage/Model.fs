@@ -319,7 +319,7 @@ let handleMerryConfirmation isAgree (currentUserId: UserId) (internalState: Merr
             return End
     }
 
-let confirm2Merry isAgree (currentUserId: UserId) (internalState: MerryConformation2State) =
+let handleMerry2Confirmation isAgree (currentUserId: UserId) (internalState: MerryConformation2State) =
     let testCurrentUserIsValid currentUserId next =
         let test (userId, userStatus) next =
             if isAgree then

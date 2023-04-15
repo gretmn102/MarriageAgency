@@ -189,10 +189,10 @@ let rec reduce (msg: Msg) (state: State): State =
 
             match act with
             | MerryConformation2View.ConfirmMerry internalState ->
-                interp (Model.confirm2Merry true userId internalState) state
+                interp (Model.handleMerry2Confirmation true userId internalState) state
 
             | MerryConformation2View.CancelMerry internalState ->
-                interp (Model.confirm2Merry false userId internalState) state
+                interp (Model.handleMerry2Confirmation false userId internalState) state
 
 let create db =
     let m =
