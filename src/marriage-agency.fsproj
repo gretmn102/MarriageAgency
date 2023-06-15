@@ -3,6 +3,10 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp3.1</TargetFramework>
   </PropertyGroup>
+  <Target Name="SpicNSpan" AfterTargets="Clean">
+    <RemoveDir Directories="$(BaseOutputPath)" />
+    <RemoveDir Directories="$(BaseIntermediateOutputPath)" />
+  </Target>
   <ItemGroup>
     <Compile Include="Modules\Marriage\Model.fs" />
     <Compile Include="Modules\Marriage\Views.fs" />
