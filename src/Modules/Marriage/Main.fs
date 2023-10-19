@@ -61,7 +61,7 @@ let rec reduce (msg: Msg) (state: State): State =
 
             | Model.MarriedCouplesCm req ->
                 let req, newMarriedCouples =
-                    MarriedCouplesStorage.interp guildId req state.MarriedCouples
+                    MarriedCouplesStorage.GuildData.ofAbstract guildId req state.MarriedCouples
 
                 let state =
                     { state with
