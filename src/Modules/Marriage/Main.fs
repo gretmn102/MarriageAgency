@@ -130,20 +130,20 @@ let rec reduce (msg: Msg) (state: State): State =
 
         match act with
         | GetMarried user2Id ->
-            interp (Model.startGetMerry user1Id user2Id) state
+            interp (Model.AbstractMarriage.startGetMerry user1Id user2Id) state
 
         | Divorce ->
-            interp (Model.divorce user1Id) state
+            interp (Model.AbstractMarriage.divorce user1Id) state
 
         | Status targetUserId ->
             let targetUserId =
                 targetUserId
                 |> Option.defaultValue user1Id
 
-            interp (Model.getSpouse targetUserId) state
+            interp (Model.AbstractMarriage.getSpouse targetUserId) state
 
         | Merry args  ->
-            interp (Model.startMerry args) state
+            interp (Model.AbstractMarriage.startMerry args) state
 
     | RequestInteraction(client, e, act) ->
         let interp =
@@ -182,7 +182,7 @@ let rec reduce (msg: Msg) (state: State): State =
                 | MerryConformationView.CancelMerry internalState ->
                     false, internalState
 
-            interp (Model.handleMerryConfirmation isAgree userId internalState) state
+            interp (Model.AbstractMarriage.handleMerryConfirmation isAgree userId internalState) state
 
         | ConformationView2Action act ->
             let userId = e.Interaction.User.Id
@@ -195,7 +195,7 @@ let rec reduce (msg: Msg) (state: State): State =
                 | MerryConformation2View.CancelMerry internalState ->
                     false, internalState
 
-            interp (Model.handleMerry2Confirmation isAgree userId internalState) state
+            interp (Model.AbstractMarriage.handleMerry2Confirmation isAgree userId internalState) state
 
 let create db =
     let m =

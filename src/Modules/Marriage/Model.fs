@@ -1,4 +1,4 @@
-module Marriage.Model
+namespace Marriage.Model
 open FsharpMyExtension
 open Types
 
@@ -191,195 +191,195 @@ module AbstractMarriage =
     let createConformation2View state next =
         AbstractMarriage.CreateConformation2View(state, next)
 
-let getSpouse userId =
-    pipeBackwardBuilder {
-        let! spouse = AbstractMarriage.apply AbstractMarriedCouplesStorage.getSpouse userId
-        match spouse with
-        | Some user2Id ->
-            do! sprintf "<@%d> в союзе с <@%d>." userId user2Id |> AbstractMarriage.print true
-            return AbstractMarriage.End
-        | None ->
-            do! sprintf "<@%d> ни с кем не обручен." userId |> AbstractMarriage.print true
-            return AbstractMarriage.End
-    }
-
-let divorce userId =
-    pipeBackwardBuilder {
-        let! spouse = AbstractMarriage.apply AbstractMarriedCouplesStorage.divorce userId
-        match spouse with
-        | Some user2Id ->
-            do! sprintf "<@%d> развелся с <@%d>!" userId user2Id |> AbstractMarriage.print false
-            return AbstractMarriage.End
-        | None ->
-            do! sprintf "<@%d>, ты ни с кем не обручен, чтобы разводиться!" userId |> AbstractMarriage.print true
-            return AbstractMarriage.End
-    }
-
-let merryTests user1Id user2Id next =
-    let testSelfMarried user1Id user2Id next =
+    let getSpouse userId =
         pipeBackwardBuilder {
-            if user1Id = user2Id then
-                do! "Нельзя обручиться с самим собой!" |> AbstractMarriage.print true
-                return AbstractMarriage.End
-            else
-                return next ()
-        }
-
-    let testIsMarried userId next =
-        pipeBackwardBuilder {
-            let! spouse =
-                AbstractMarriage.apply AbstractMarriedCouplesStorage.getSpouse userId
-
+            let! spouse = apply AbstractMarriedCouplesStorage.getSpouse userId
             match spouse with
-            | None ->
-                return next ()
             | Some user2Id ->
-                do! sprintf "<@%d> уже в союзе с <@%d>!" userId user2Id |> AbstractMarriage.print true
+                do! sprintf "<@%d> в союзе с <@%d>." userId user2Id |> print true
+                return AbstractMarriage.End
+            | None ->
+                do! sprintf "<@%d> ни с кем не обручен." userId |> print true
                 return AbstractMarriage.End
         }
 
-    let testUserIsBot user2Id next =
+    let divorce userId =
         pipeBackwardBuilder {
-            let! isBot =
-                AbstractMarriage.userIsBot user2Id
-
-            if isBot then
-                do! sprintf "С ботом <@%d> низзя обручиться!" user2Id |> AbstractMarriage.print true
+            let! spouse = apply AbstractMarriedCouplesStorage.divorce userId
+            match spouse with
+            | Some user2Id ->
+                do! sprintf "<@%d> развелся с <@%d>!" userId user2Id |> print false
                 return AbstractMarriage.End
-            else
-                return next ()
+            | None ->
+                do! sprintf "<@%d>, ты ни с кем не обручен, чтобы разводиться!" userId |> print true
+                return AbstractMarriage.End
         }
 
-    pipeBackwardBuilder {
-        do! testSelfMarried user1Id user2Id
-        do! testUserIsBot user2Id
-        do! testIsMarried user1Id
-        do! testIsMarried user2Id
-        return next ()
-    }
+    let merryTests user1Id user2Id next =
+        let testSelfMarried user1Id user2Id next =
+            pipeBackwardBuilder {
+                if user1Id = user2Id then
+                    do! "Нельзя обручиться с самим собой!" |> print true
+                    return AbstractMarriage.End
+                else
+                    return next ()
+            }
 
-let merry user1Id user2Id =
-    let merry () next =
+        let testIsMarried userId next =
+            pipeBackwardBuilder {
+                let! spouse =
+                    apply AbstractMarriedCouplesStorage.getSpouse userId
+
+                match spouse with
+                | None ->
+                    return next ()
+                | Some user2Id ->
+                    do! sprintf "<@%d> уже в союзе с <@%d>!" userId user2Id |> print true
+                    return AbstractMarriage.End
+            }
+
+        let testUserIsBot user2Id next =
+            pipeBackwardBuilder {
+                let! isBot =
+                    userIsBot user2Id
+
+                if isBot then
+                    do! sprintf "С ботом <@%d> низзя обручиться!" user2Id |> print true
+                    return AbstractMarriage.End
+                else
+                    return next ()
+            }
+
         pipeBackwardBuilder {
-            let! res =
-                AbstractMarriage.apply AbstractMarriedCouplesStorage.merry (user1Id, user2Id)
-            match res with
-            | Ok () ->
-                return next ()
-            | Error errMsg ->
-                do! AbstractMarriage.print true errMsg
-                return AbstractMarriage.End
+            do! testSelfMarried user1Id user2Id
+            do! testUserIsBot user2Id
+            do! testIsMarried user1Id
+            do! testIsMarried user2Id
+            return next ()
         }
 
-    pipeBackwardBuilder {
-        do! merryTests user1Id user2Id
-        do! merry ()
-        do! sprintf "Объявляю вас парой носков! Можете обменяться нитками." |> AbstractMarriage.print false
-        return AbstractMarriage.End
-    }
+    let merry user1Id user2Id =
+        let merry () next =
+            pipeBackwardBuilder {
+                let! res =
+                    apply AbstractMarriedCouplesStorage.merry (user1Id, user2Id)
+                match res with
+                | Ok () ->
+                    return next ()
+                | Error errMsg ->
+                    do! print true errMsg
+                    return AbstractMarriage.End
+            }
 
-let startGetMerry user1Id user2Id =
-    pipeBackwardBuilder {
-        do! merryTests user1Id user2Id
-        do! AbstractMarriage.createConformationView user1Id user2Id
-        return AbstractMarriage.End
-    }
-
-let startMerry ({ MatchmakerId = matchmakerId; User1Id = user1Id; User2Id = user2Id } as args: MerryArgs) =
-    if matchmakerId = user1Id then
-        startGetMerry user1Id user2Id
-    elif matchmakerId = user2Id then
-        startGetMerry user2Id user1Id
-    else
         pipeBackwardBuilder {
             do! merryTests user1Id user2Id
-            do! AbstractMarriage.createConformation2View (MerryConformation2State.ofMerryArgs args)
+            do! merry ()
+            do! sprintf "Объявляю вас парой носков! Можете обменяться нитками." |> print false
             return AbstractMarriage.End
         }
 
-let handleMerryConfirmation isAgree (currentUserId: UserId) (internalState: MerryConformationState) =
-    let {
-        TargetUserId = targetUserId
-    } = internalState
-
-    pipeBackwardBuilder {
-        if currentUserId = targetUserId then
-            if isAgree then
-                return merry internalState.SourceUserId targetUserId
-            else
-                do! sprintf "<@%d>, увы, но носок <@%d> тебе отказал." internalState.SourceUserId targetUserId
-                    |> AbstractMarriage.print false
-                return AbstractMarriage.End
-        else
-            do! sprintf "На эту кнопку должен нажать <@%d>!" targetUserId
-                |> AbstractMarriage.print true
+    let startGetMerry user1Id user2Id =
+        pipeBackwardBuilder {
+            do! merryTests user1Id user2Id
+            do! createConformationView user1Id user2Id
             return AbstractMarriage.End
-    }
+        }
 
-let handleMerry2Confirmation isAgree (currentUserId: UserId) (internalState: MerryConformation2State) =
-    let testCurrentUserIsValid currentUserId next =
-        let test (userId, userStatus) next =
-            if isAgree then
-                pipeBackwardBuilder {
-                    match userStatus with
-                    | MerryConformation2Status.Unknown
-                    | MerryConformation2Status.Disagree ->
-                        return next (userId, MerryConformation2Status.Agree)
-                    | MerryConformation2Status.Agree ->
-                        do! sprintf "Ты уже согласил(ся|ась)."
-                            |> AbstractMarriage.print true
-                        return AbstractMarriage.End
-                }
-            else
-                pipeBackwardBuilder {
-                    match userStatus with
-                    | MerryConformation2Status.Unknown
-                    | MerryConformation2Status.Agree ->
-                        return next (userId, MerryConformation2Status.Disagree)
-                    | MerryConformation2Status.Disagree ->
-                        do! sprintf "Ты уже отказал(ся|ась)."
-                            |> AbstractMarriage.print true
-                        return AbstractMarriage.End
-                }
+    let startMerry ({ MatchmakerId = matchmakerId; User1Id = user1Id; User2Id = user2Id } as args: MerryArgs) =
+        if matchmakerId = user1Id then
+            startGetMerry user1Id user2Id
+        elif matchmakerId = user2Id then
+            startGetMerry user2Id user1Id
+        else
+            pipeBackwardBuilder {
+                do! merryTests user1Id user2Id
+                do! createConformation2View (MerryConformation2State.ofMerryArgs args)
+                return AbstractMarriage.End
+            }
+
+    let handleMerryConfirmation isAgree (currentUserId: UserId) (internalState: MerryConformationState) =
+        let {
+            TargetUserId = targetUserId
+        } = internalState
 
         pipeBackwardBuilder {
-            let {
+            if currentUserId = targetUserId then
+                if isAgree then
+                    return merry internalState.SourceUserId targetUserId
+                else
+                    do! sprintf "<@%d>, увы, но носок <@%d> тебе отказал." internalState.SourceUserId targetUserId
+                        |> print false
+                    return AbstractMarriage.End
+            else
+                do! sprintf "На эту кнопку должен нажать <@%d>!" targetUserId
+                    |> print true
+                return AbstractMarriage.End
+        }
+
+    let handleMerry2Confirmation isAgree (currentUserId: UserId) (internalState: MerryConformation2State) =
+        let testCurrentUserIsValid currentUserId next =
+            let test (userId, userStatus) next =
+                if isAgree then
+                    pipeBackwardBuilder {
+                        match userStatus with
+                        | MerryConformation2Status.Unknown
+                        | MerryConformation2Status.Disagree ->
+                            return next (userId, MerryConformation2Status.Agree)
+                        | MerryConformation2Status.Agree ->
+                            do! sprintf "Ты уже согласил(ся|ась)."
+                                |> print true
+                            return AbstractMarriage.End
+                    }
+                else
+                    pipeBackwardBuilder {
+                        match userStatus with
+                        | MerryConformation2Status.Unknown
+                        | MerryConformation2Status.Agree ->
+                            return next (userId, MerryConformation2Status.Disagree)
+                        | MerryConformation2Status.Disagree ->
+                            do! sprintf "Ты уже отказал(ся|ась)."
+                                |> print true
+                            return AbstractMarriage.End
+                    }
+
+            pipeBackwardBuilder {
+                let {
+                    MatchmakerId = matchmakerId
+                    User1Status = user1Id, user1Status
+                    User2Status = user2Id, user2Status
+                } = internalState
+
+                if currentUserId = user1Id then
+                    let! res = test (user1Id, user1Status)
+                    let internalState =
+                        { internalState with
+                            User1Status = res
+                        }
+                    return next internalState
+                elif currentUserId = user2Id then
+                    let! res = test (user2Id, user2Status)
+                    let internalState =
+                        { internalState with
+                            User2Status = res
+                        }
+                    return next internalState
+                else
+                    do! sprintf "На эту кнопку должен нажать либо <@%d>, либо <@%d>." user1Id user2Id
+                        |> print true
+                    return AbstractMarriage.End
+            }
+
+        pipeBackwardBuilder {
+            let! {
                 MatchmakerId = matchmakerId
                 User1Status = user1Id, user1Status
                 User2Status = user2Id, user2Status
-            } = internalState
+            } as internalState = testCurrentUserIsValid currentUserId
 
-            if currentUserId = user1Id then
-                let! res = test (user1Id, user1Status)
-                let internalState =
-                    { internalState with
-                        User1Status = res
-                    }
-                return next internalState
-            elif currentUserId = user2Id then
-                let! res = test (user2Id, user2Status)
-                let internalState =
-                    { internalState with
-                        User2Status = res
-                    }
-                return next internalState
-            else
-                do! sprintf "На эту кнопку должен нажать либо <@%d>, либо <@%d>." user1Id user2Id
-                    |> AbstractMarriage.print true
+            match user1Status, user2Status with
+            | MerryConformation2Status.Agree, MerryConformation2Status.Agree ->
+                return merry user1Id user2Id
+            | _ ->
+                do! createConformation2View internalState
                 return AbstractMarriage.End
         }
-
-    pipeBackwardBuilder {
-        let! {
-            MatchmakerId = matchmakerId
-            User1Status = user1Id, user1Status
-            User2Status = user2Id, user2Status
-        } as internalState = testCurrentUserIsValid currentUserId
-
-        match user1Status, user2Status with
-        | MerryConformation2Status.Agree, MerryConformation2Status.Agree ->
-            return merry user1Id user2Id
-        | _ ->
-            do! AbstractMarriage.createConformation2View internalState
-            return AbstractMarriage.End
-    }

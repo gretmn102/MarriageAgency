@@ -12,7 +12,7 @@ module MerryResultView =
         b
 
 module MerryConformationView =
-    open Model
+    open Marriage.Model
 
     let viewId = "merryConformationId"
 
@@ -85,7 +85,7 @@ module MerryConformationView =
         b
 
 module MerryConformation2View =
-    open Model
+    open Marriage.Model
 
     let viewId = "merryConformation2Id"
 
