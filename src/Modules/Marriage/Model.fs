@@ -159,17 +159,17 @@ module MerryConformation2State =
     let deserialize =
         FParsecExt.runResult Parser.parse
 
-type MarriageCmd =
-    | MarriedCouplesCm of AbstractMarriedCouplesStorage<MarriageCmd>
-    | Print of Req<{| IsEphemeral: bool; Description: string |}, unit, MarriageCmd>
-    | UserIsBot of Req<UserId, bool, MarriageCmd>
-    | CreateConformationView of Req<MerryConformationState, unit, MarriageCmd>
-    | CreateConformation2View of Req<MerryConformation2State, unit, MarriageCmd>
+type AbstractMarriage =
+    | MarriedCouplesCm of AbstractMarriedCouplesStorage<AbstractMarriage>
+    | Print of Req<{| IsEphemeral: bool; Description: string |}, unit, AbstractMarriage>
+    | UserIsBot of Req<UserId, bool, AbstractMarriage>
+    | CreateConformationView of Req<MerryConformationState, unit, AbstractMarriage>
+    | CreateConformation2View of Req<MerryConformation2State, unit, AbstractMarriage>
     | End
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 [<RequireQualifiedAccess>]
-module MarriageCmd =
+module AbstractMarriage =
     let apply fn arg next =
         MarriedCouplesCm (fn arg (fun res ->
             next res
@@ -192,25 +192,25 @@ module MarriageCmd =
 
 let getSpouse userId =
     pipeBackwardBuilder {
-        let! spouse = MarriageCmd.apply AbstractMarriedCouplesStorage.getSpouse userId
+        let! spouse = AbstractMarriage.apply AbstractMarriedCouplesStorage.getSpouse userId
         match spouse with
         | Some user2Id ->
-            do! sprintf "<@%d> в союзе с <@%d>." userId user2Id |> MarriageCmd.print true
+            do! sprintf "<@%d> в союзе с <@%d>." userId user2Id |> AbstractMarriage.print true
             return End
         | None ->
-            do! sprintf "<@%d> ни с кем не обручен." userId |> MarriageCmd.print true
+            do! sprintf "<@%d> ни с кем не обручен." userId |> AbstractMarriage.print true
             return End
     }
 
 let divorce userId =
     pipeBackwardBuilder {
-        let! spouse = MarriageCmd.apply AbstractMarriedCouplesStorage.divorce userId
+        let! spouse = AbstractMarriage.apply AbstractMarriedCouplesStorage.divorce userId
         match spouse with
         | Some user2Id ->
-            do! sprintf "<@%d> развелся с <@%d>!" userId user2Id |> MarriageCmd.print false
+            do! sprintf "<@%d> развелся с <@%d>!" userId user2Id |> AbstractMarriage.print false
             return End
         | None ->
-            do! sprintf "<@%d>, ты ни с кем не обручен, чтобы разводиться!" userId |> MarriageCmd.print true
+            do! sprintf "<@%d>, ты ни с кем не обручен, чтобы разводиться!" userId |> AbstractMarriage.print true
             return End
     }
 
@@ -218,7 +218,7 @@ let merryTests user1Id user2Id next =
     let testSelfMarried user1Id user2Id next =
         pipeBackwardBuilder {
             if user1Id = user2Id then
-                do! "Нельзя обручиться с самим собой!" |> MarriageCmd.print true
+                do! "Нельзя обручиться с самим собой!" |> AbstractMarriage.print true
                 return End
             else
                 return next ()
@@ -227,23 +227,23 @@ let merryTests user1Id user2Id next =
     let testIsMarried userId next =
         pipeBackwardBuilder {
             let! spouse =
-                MarriageCmd.apply AbstractMarriedCouplesStorage.getSpouse userId
+                AbstractMarriage.apply AbstractMarriedCouplesStorage.getSpouse userId
 
             match spouse with
             | None ->
                 return next ()
             | Some user2Id ->
-                do! sprintf "<@%d> уже в союзе с <@%d>!" userId user2Id |> MarriageCmd.print true
+                do! sprintf "<@%d> уже в союзе с <@%d>!" userId user2Id |> AbstractMarriage.print true
                 return End
         }
 
     let testUserIsBot user2Id next =
         pipeBackwardBuilder {
             let! isBot =
-                MarriageCmd.userIsBot user2Id
+                AbstractMarriage.userIsBot user2Id
 
             if isBot then
-                do! sprintf "С ботом <@%d> низзя обручиться!" user2Id |> MarriageCmd.print true
+                do! sprintf "С ботом <@%d> низзя обручиться!" user2Id |> AbstractMarriage.print true
                 return End
             else
                 return next ()
@@ -261,26 +261,26 @@ let merry user1Id user2Id =
     let merry () next =
         pipeBackwardBuilder {
             let! res =
-                MarriageCmd.apply AbstractMarriedCouplesStorage.merry (user1Id, user2Id)
+                AbstractMarriage.apply AbstractMarriedCouplesStorage.merry (user1Id, user2Id)
             match res with
             | Ok () ->
                 return next ()
             | Error errMsg ->
-                do! MarriageCmd.print true errMsg
+                do! AbstractMarriage.print true errMsg
                 return End
         }
 
     pipeBackwardBuilder {
         do! merryTests user1Id user2Id
         do! merry ()
-        do! sprintf "Объявляю вас парой носков! Можете обменяться нитками." |> MarriageCmd.print false
+        do! sprintf "Объявляю вас парой носков! Можете обменяться нитками." |> AbstractMarriage.print false
         return End
     }
 
 let startGetMerry user1Id user2Id =
     pipeBackwardBuilder {
         do! merryTests user1Id user2Id
-        do! MarriageCmd.createConformationView user1Id user2Id
+        do! AbstractMarriage.createConformationView user1Id user2Id
         return End
     }
 
@@ -292,7 +292,7 @@ let startMerry ({ MatchmakerId = matchmakerId; User1Id = user1Id; User2Id = user
     else
         pipeBackwardBuilder {
             do! merryTests user1Id user2Id
-            do! MarriageCmd.createConformation2View (MerryConformation2State.ofMerryArgs args)
+            do! AbstractMarriage.createConformation2View (MerryConformation2State.ofMerryArgs args)
             return End
         }
 
@@ -307,11 +307,11 @@ let handleMerryConfirmation isAgree (currentUserId: UserId) (internalState: Merr
                 return merry internalState.SourceUserId targetUserId
             else
                 do! sprintf "<@%d>, увы, но носок <@%d> тебе отказал." internalState.SourceUserId targetUserId
-                    |> MarriageCmd.print false
+                    |> AbstractMarriage.print false
                 return End
         else
             do! sprintf "На эту кнопку должен нажать <@%d>!" targetUserId
-                |> MarriageCmd.print true
+                |> AbstractMarriage.print true
             return End
     }
 
@@ -326,7 +326,7 @@ let handleMerry2Confirmation isAgree (currentUserId: UserId) (internalState: Mer
                         return next (userId, MerryConformation2Status.Agree)
                     | MerryConformation2Status.Agree ->
                         do! sprintf "Ты уже согласил(ся|ась)."
-                            |> MarriageCmd.print true
+                            |> AbstractMarriage.print true
                         return End
                 }
             else
@@ -337,7 +337,7 @@ let handleMerry2Confirmation isAgree (currentUserId: UserId) (internalState: Mer
                         return next (userId, MerryConformation2Status.Disagree)
                     | MerryConformation2Status.Disagree ->
                         do! sprintf "Ты уже отказал(ся|ась)."
-                            |> MarriageCmd.print true
+                            |> AbstractMarriage.print true
                         return End
                 }
 
@@ -364,7 +364,7 @@ let handleMerry2Confirmation isAgree (currentUserId: UserId) (internalState: Mer
                 return next internalState
             else
                 do! sprintf "На эту кнопку должен нажать либо <@%d>, либо <@%d>." user1Id user2Id
-                    |> MarriageCmd.print true
+                    |> AbstractMarriage.print true
                 return End
         }
 
@@ -379,6 +379,6 @@ let handleMerry2Confirmation isAgree (currentUserId: UserId) (internalState: Mer
         | MerryConformation2Status.Agree, MerryConformation2Status.Agree ->
             return merry user1Id user2Id
         | _ ->
-            do! MarriageCmd.createConformation2View internalState
+            do! AbstractMarriage.createConformation2View internalState
             return End
     }
