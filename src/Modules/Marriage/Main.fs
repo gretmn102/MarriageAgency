@@ -47,7 +47,7 @@ let rec reduce (msg: Msg) (state: State): State =
     let interp guildId response responseEphemeral getMemberAsync cmd state =
         let rec interp cmd state =
             match cmd with
-            | Model.Print(args, next) ->
+            | Model.AbstractMarriage.Print(args, next) ->
                 let response =
                     if args.IsEphemeral then
                         responseEphemeral
@@ -59,7 +59,7 @@ let rec reduce (msg: Msg) (state: State): State =
 
                 interp (next ()) state
 
-            | Model.MarriedCouplesCm req ->
+            | Model.AbstractMarriage.MarriedCouplesCm req ->
                 let req, newMarriedCouples =
                     MarriedCouplesStorage.GuildData.ofAbstract guildId req state.MarriedCouples
 
@@ -69,17 +69,17 @@ let rec reduce (msg: Msg) (state: State): State =
                     }
                 interp req state
 
-            | Model.CreateConformationView(internalState, next) ->
+            | Model.AbstractMarriage.CreateConformationView(internalState, next) ->
                 MerryConformationView.conformationView internalState
                 |> response
 
                 interp (next ()) state
-            | Model.CreateConformation2View(internalState, next) ->
+            | Model.AbstractMarriage.CreateConformation2View(internalState, next) ->
                 MerryConformation2View.create internalState
                 |> response
 
                 interp (next ()) state
-            | Model.UserIsBot(userId, userIdBot) ->
+            | Model.AbstractMarriage.UserIsBot(userId, userIdBot) ->
                 let user =
                     try
                         let guildMember: Entities.DiscordMember = await <| getMemberAsync userId
@@ -99,7 +99,7 @@ let rec reduce (msg: Msg) (state: State): State =
 
                     state
 
-            | Model.End -> state
+            | Model.AbstractMarriage.End -> state
 
         interp cmd state
 
