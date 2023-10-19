@@ -161,7 +161,7 @@ module MerryConformation2State =
 
 [<RequireQualifiedAccess>]
 type AbstractMarriage =
-    | MarriedCouplesCm of AbstractMarriedCouplesStorage<AbstractMarriage>
+    | AbstractMarriedCouplesStorage of AbstractMarriedCouplesStorage<AbstractMarriage>
     | Print of Req<{| IsEphemeral: bool; Description: string |}, unit, AbstractMarriage>
     | UserIsBot of Req<UserId, bool, AbstractMarriage>
     | CreateConformationView of Req<MerryConformationState, unit, AbstractMarriage>
@@ -172,7 +172,7 @@ type AbstractMarriage =
 [<RequireQualifiedAccess>]
 module AbstractMarriage =
     let apply fn arg next =
-        AbstractMarriage.MarriedCouplesCm (fn arg (fun res ->
+        AbstractMarriage.AbstractMarriedCouplesStorage (fn arg (fun res ->
             next res
         ))
 
