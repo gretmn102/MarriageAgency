@@ -4,14 +4,14 @@ open Types
 
 type Req<'Arg, 'Res, 'Next> = 'Arg * ('Res -> 'Next)
 
-type MarriedCouplesCmd<'Next> =
+type AbstractMarriedCouplesStorage<'Next> =
     | GetSpouse of Req<UserId, UserId option, 'Next>
     | Merry of Req<UserId * UserId, Result<unit, string>, 'Next>
     | Divorce of Req<UserId, UserId option, 'Next>
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 [<RequireQualifiedAccess>]
-module MarriedCouplesCmd =
+module AbstractMarriedCouplesStorage =
     let req f arg next = f(arg, next)
 
     let getSpouse userId next =
@@ -160,7 +160,7 @@ module MerryConformation2State =
         FParsecExt.runResult Parser.parse
 
 type MarriageCmd =
-    | MarriedCouplesCm of MarriedCouplesCmd<MarriageCmd>
+    | MarriedCouplesCm of AbstractMarriedCouplesStorage<MarriageCmd>
     | Print of Req<{| IsEphemeral: bool; Description: string |}, unit, MarriageCmd>
     | UserIsBot of Req<UserId, bool, MarriageCmd>
     | CreateConformationView of Req<MerryConformationState, unit, MarriageCmd>
@@ -192,7 +192,7 @@ module MarriageCmd =
 
 let getSpouse userId =
     pipeBackwardBuilder {
-        let! spouse = MarriageCmd.apply MarriedCouplesCmd.getSpouse userId
+        let! spouse = MarriageCmd.apply AbstractMarriedCouplesStorage.getSpouse userId
         match spouse with
         | Some user2Id ->
             do! sprintf "<@%d> в союзе с <@%d>." userId user2Id |> MarriageCmd.print true
@@ -204,7 +204,7 @@ let getSpouse userId =
 
 let divorce userId =
     pipeBackwardBuilder {
-        let! spouse = MarriageCmd.apply MarriedCouplesCmd.divorce userId
+        let! spouse = MarriageCmd.apply AbstractMarriedCouplesStorage.divorce userId
         match spouse with
         | Some user2Id ->
             do! sprintf "<@%d> развелся с <@%d>!" userId user2Id |> MarriageCmd.print false
@@ -227,7 +227,7 @@ let merryTests user1Id user2Id next =
     let testIsMarried userId next =
         pipeBackwardBuilder {
             let! spouse =
-                MarriageCmd.apply MarriedCouplesCmd.getSpouse userId
+                MarriageCmd.apply AbstractMarriedCouplesStorage.getSpouse userId
 
             match spouse with
             | None ->
@@ -261,7 +261,7 @@ let merry user1Id user2Id =
     let merry () next =
         pipeBackwardBuilder {
             let! res =
-                MarriageCmd.apply MarriedCouplesCmd.merry (user1Id, user2Id)
+                MarriageCmd.apply AbstractMarriedCouplesStorage.merry (user1Id, user2Id)
             match res with
             | Ok () ->
                 return next ()
