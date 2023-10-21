@@ -4,6 +4,7 @@ open Types
 
 type Req<'Arg, 'Res, 'Next> = 'Arg * ('Res -> 'Next)
 
+[<RequireQualifiedAccess>]
 type AbstractMarriedCouplesStorage<'Next> =
     | GetSpouse of Req<UserId, UserId option, 'Next>
     | Merry of Req<UserId * UserId, Result<unit, string>, 'Next>
@@ -15,13 +16,13 @@ module AbstractMarriedCouplesStorage =
     let req f arg next = f(arg, next)
 
     let getSpouse userId next =
-        GetSpouse(userId, next)
+        AbstractMarriedCouplesStorage.GetSpouse(userId, next)
 
     let merry (user1Id, user2Id) next =
-        Merry((user1Id, user2Id), next)
+        AbstractMarriedCouplesStorage.Merry((user1Id, user2Id), next)
 
     let divorce userId next =
-        Divorce(userId, next)
+        AbstractMarriedCouplesStorage.Divorce(userId, next)
 
 type MerryConformationState =
     {

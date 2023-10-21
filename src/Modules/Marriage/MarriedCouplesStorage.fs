@@ -89,7 +89,7 @@ module GuildData =
         let createId id = { GuildId = guildId; UserId = id }
 
         match req with
-        | Divorce(user1Id, isSuccess) ->
+        | AbstractMarriedCouplesStorage.Divorce(user1Id, isSuccess) ->
             let user1Id = createId user1Id
             match tryFindById user1Id marriedCouples with
             | Some data ->
@@ -104,7 +104,7 @@ module GuildData =
                 let req = isSuccess None
                 req, marriedCouples
 
-        | GetSpouse(user1Id, f) ->
+        | AbstractMarriedCouplesStorage.GetSpouse(user1Id, f) ->
             let user1Id = createId user1Id
             let res =
                 match tryFindById user1Id marriedCouples with
@@ -115,7 +115,7 @@ module GuildData =
             let req = f res
             req, marriedCouples
 
-        | Merry((user1Id, user2Id), f) ->
+        | AbstractMarriedCouplesStorage.Merry((user1Id, user2Id), f) ->
             let user1Id = createId user1Id
 
             match tryFindById user1Id marriedCouples with
