@@ -43,11 +43,15 @@ type State =
         MarriedCouples: MarriedCouplesStorage.GuildData
     }
 
-let rec reduce (msg: Msg) (state: State): State =
-    let interp guildId response responseEphemeral getMemberAsync cmd state =
-        let rec interp cmd state =
-            match cmd with
-            | Model.AbstractMarriage.Print(args, next) ->
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<RequireQualifiedAccess>]
+module State =
+    open Marriage.Model
+
+    let ofAbstract guildId response responseEphemeral getMemberAsync abstractMarriage state =
+        let rec ofAbstract abstractMarriage state =
+            match abstractMarriage with
+            | AbstractMarriage.Print(args, next) ->
                 let response =
                     if args.IsEphemeral then
                         responseEphemeral
@@ -57,9 +61,9 @@ let rec reduce (msg: Msg) (state: State): State =
                 MerryResultView.view args.Description
                 |> response
 
-                interp (next ()) state
+                ofAbstract (next ()) state
 
-            | Model.AbstractMarriage.AbstractMarriedCouplesStorage req ->
+            | AbstractMarriage.AbstractMarriedCouplesStorage req ->
                 let req, newMarriedCouples =
                     MarriedCouplesStorage.GuildData.ofAbstract guildId req state.MarriedCouples
 
@@ -67,19 +71,19 @@ let rec reduce (msg: Msg) (state: State): State =
                     { state with
                         MarriedCouples = newMarriedCouples
                     }
-                interp req state
+                ofAbstract req state
 
-            | Model.AbstractMarriage.CreateConformationView(internalState, next) ->
+            | AbstractMarriage.CreateConformationView(internalState, next) ->
                 MerryConformationView.conformationView internalState
                 |> response
 
-                interp (next ()) state
-            | Model.AbstractMarriage.CreateConformation2View(internalState, next) ->
+                ofAbstract (next ()) state
+            | AbstractMarriage.CreateConformation2View(internalState, next) ->
                 MerryConformation2View.create internalState
                 |> response
 
-                interp (next ()) state
-            | Model.AbstractMarriage.UserIsBot(userId, userIdBot) ->
+                ofAbstract (next ()) state
+            | AbstractMarriage.UserIsBot(userId, userIdBot) ->
                 let user =
                     try
                         let guildMember: Entities.DiscordMember = await <| getMemberAsync userId
@@ -91,7 +95,7 @@ let rec reduce (msg: Msg) (state: State): State =
                 | Ok user ->
                     let req = userIdBot user.IsBot
 
-                    interp req state
+                    ofAbstract req state
                 | Error(errorValue) ->
                     let b = Entities.DiscordMessageBuilder()
                     b.Content <- sprintf "```\n%s\n```" errorValue
@@ -99,10 +103,11 @@ let rec reduce (msg: Msg) (state: State): State =
 
                     state
 
-            | Model.AbstractMarriage.End -> state
+            | AbstractMarriage.End -> state
 
-        interp cmd state
+        ofAbstract abstractMarriage state
 
+let rec reduce (msg: Msg) (state: State): State =
     match msg with
     | RequestSlashCommand(e, act) ->
         let user1Id = e.Interaction.User.Id
@@ -126,7 +131,7 @@ let rec reduce (msg: Msg) (state: State): State =
             let getMemberAsync userId =
                 e.Interaction.Guild.GetMemberAsync userId
 
-            interp guildId response responseEphemeral getMemberAsync
+            State.ofAbstract guildId response responseEphemeral getMemberAsync
 
         match act with
         | GetMarried user2Id ->
@@ -168,7 +173,7 @@ let rec reduce (msg: Msg) (state: State): State =
 
             let guildId = e.Guild.Id
 
-            interp guildId response responseEphemeral getMemberAsync
+            State.ofAbstract guildId response responseEphemeral getMemberAsync
 
         match act with
         | ConformationViewAction act ->
