@@ -183,7 +183,10 @@ let main argv =
 
     awaiti <| client.ConnectAsync()
 
-    // awaiti <| Task.Delay -1
-    startServer ()
+    match argv with
+    | [| "--server" |] ->
+        startServer ()
+    | _ ->
+        awaiti <| Task.Delay -1
 
     0
