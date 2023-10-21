@@ -11,7 +11,7 @@ let botEventId = new EventId(42, "Bot-Event")
 
 let initBotModules (db: MongoDB.Driver.IMongoDatabase) =
     [|
-        Marriage.Main.create db
+        Marriage.Main.State.create db
     |]
 
 open MongoDB.Driver
