@@ -1,5 +1,6 @@
 namespace Marriage.MarriedCouplesStorage
 open FsharpMyExtension
+open FsharpMyExtension.Either
 open MongoDB.Driver
 open MongoDB.Bson
 open DiscordBotExtensions.Types
@@ -34,6 +35,14 @@ type Id =
         GuildId: GuildId
         UserId: UserId
     }
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<RequireQualifiedAccess>]
+module Id =
+    let create guildId userId =
+        {
+            GuildId = guildId
+            UserId = userId
+        }
 
 type Data = CommonDb.Data<Id, Version, MainData>
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -64,23 +73,55 @@ module GuildData =
             collectionName
             db
 
-    let set id setAdditionParams (guildData: GuildData) =
+    let set id setAdditionParams (guildData: GuildData) : GuildData =
         CommonDb.GuildData.set
             createData
             id
             setAdditionParams
             guildData
 
-    let sets (items: Data seq) db =
+    let sets (items: Data seq) (db: GuildData) : GuildData =
         CommonDb.GuildData.sets
             items
             db
 
-    let drop (db: IMongoDatabase) (items: GuildData) =
+    let drop (db: IMongoDatabase) (items: GuildData) : GuildData =
         CommonDb.GuildData.drop db items
 
     let tryFindById id (items: GuildData): Data option =
         CommonDb.GuildData.tryFind id items
+
+    let filterByGuildId guildId (storage: GuildData) : Data list =
+        storage.Cache
+        |> Seq.fold
+            (fun st (KeyValue(id, data)) ->
+                if id.GuildId = guildId then
+                    data::st
+                else
+                    st
+            )
+            []
+        |> List.rev
+
+    let getMarriageCouplesByGuildId guildId (storage: GuildData) : Either<Data, Data * Data> seq =
+        storage.Cache
+        |> Seq.fold
+            (fun st (KeyValue(id, data)) ->
+                if id.GuildId = guildId then
+                    match Map.tryFind data.Data.Spouse st with
+                    | None ->
+                        Map.add id.UserId (Left data) st
+                    | Some x ->
+                        match x with
+                        | Left prevData ->
+                            Map.add prevData.Id.UserId (Right (prevData, data)) st
+                        | Right _ ->
+                            st
+                else
+                    st
+            )
+            Map.empty
+        |> Seq.map (fun (KeyValue(_, v)) -> v)
 
     let removeByIds ids (items: GuildData) =
         CommonDb.GuildData.removeByIds ids items

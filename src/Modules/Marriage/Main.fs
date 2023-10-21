@@ -9,11 +9,79 @@ open DiscordBotExtensions.Extensions
 open Marriage
 open Marriage.Views
 
+module MarriedList =
+    open DiscordBotExtensions.Ui.Table
+
+    type SortBy =
+        | None = 0
+
+    let initSetting getState: Setting<_, SortBy, _, (GuildId * MarriedCouplesStorage.GuildData)> =
+        {
+            Id = "MarriedList"
+
+            GetState = getState
+
+            Title = fun _ _ -> "Парочки"
+
+            GetHeaders = fun sortBy ->
+                match sortBy with
+                | SortBy.None ->
+                    [| "1"; "2" |]
+                | x ->
+                    failwithf "MarriedList.SortBy %A" x
+
+            GetItems = fun () (guildId, storage) ->
+                MarriedCouplesStorage.GuildData.getMarriageCouplesByGuildId guildId storage
+                |> Array.ofSeq
+
+            ItemsCountPerPage = 10
+
+            SortBy = SortByContainer.Init [|
+                SortBy.None, "Отсортировать по первому"
+            |]
+
+            SortFunction = fun sortBy items ->
+                match sortBy with
+                | SortBy.None ->
+                    items
+                | x ->
+                    failwithf "MarriedList.SortBy %A" x
+
+            MapFunction =
+                fun _ i user ->
+                    match user with
+                    | Right(firstUser, secondUser) ->
+                        [|
+                            sprintf "%d <@%d>" i firstUser.Id.UserId
+                            sprintf "<@%d>" secondUser.Id.UserId
+                        |]
+                    | Left firstUser ->
+                        [|
+                            sprintf "%d <@%d>" i firstUser.Id.UserId
+                            sprintf "<@%d>" firstUser.Data.Spouse
+                        |]
+        }
+
+    let createTable
+        (addComponents: Entities.DiscordComponent [] -> _)
+        addEmbed
+        userRanks =
+
+        createTable addComponents addEmbed 1 (None, ()) (initSetting userRanks)
+
+    let componentInteractionCreateHandle (client: DiscordClient) (e: EventArgs.ComponentInteractionCreateEventArgs) getState =
+        let getState () =
+            let state = getState ()
+            e.Guild.Id, state
+
+        componentInteractionCreateHandle client e (initSetting getState)
+
 type SlashCommand =
     | Merry of Model.MerryArgs
     | GetMarried of UserId
     | Divorce
     | Status of UserId option
+    | GetMarriedList
 
 type ViewAction =
     | ConformationViewAction of MerryConformationView.Action
@@ -34,6 +102,7 @@ module ViewActions =
 type Msg =
     | RequestSlashCommand of EventArgs.InteractionCreateEventArgs * SlashCommand
     | RequestInteraction of DiscordClient * EventArgs.ComponentInteractionCreateEventArgs * ViewAction
+    | RequestMarriedCouples of AsyncReplyChannel<MarriedCouplesStorage.GuildData>
 
 type State =
     {
@@ -110,14 +179,14 @@ module State =
             let user1Id = e.Interaction.User.Id
             let guildId = e.Interaction.Guild.Id
 
-            let interp =
-                let response (b: Entities.DiscordMessageBuilder) =
-                    let b = Entities.DiscordInteractionResponseBuilder(b)
-                    b.AddMentions(Entities.Mentions.All) |> ignore
-                    let typ =
-                        InteractionResponseType.ChannelMessageWithSource
-                    awaiti <| e.Interaction.CreateResponseAsync (typ, b)
+            let response (b: Entities.DiscordMessageBuilder) =
+                let b = Entities.DiscordInteractionResponseBuilder(b)
+                b.AddMentions(Entities.Mentions.All) |> ignore
+                let typ =
+                    InteractionResponseType.ChannelMessageWithSource
+                awaiti <| e.Interaction.CreateResponseAsync (typ, b)
 
+            let interp =
                 let responseEphemeral (b: Entities.DiscordMessageBuilder) =
                     let b = Entities.DiscordInteractionResponseBuilder(b)
                     b.IsEphemeral <- true
@@ -146,6 +215,18 @@ module State =
 
             | Merry args  ->
                 interp (AbstractMarriage.startMerry args) state
+
+            | GetMarriedList ->
+                let builder = Entities.DiscordMessageBuilder()
+                MarriedList.createTable
+                    builder.AddComponents
+                    builder.AddEmbed
+                    (fun () ->
+                        guildId, state.MarriedCouples
+                    )
+                response builder
+
+                state
 
         | RequestInteraction(client, e, act) ->
             let interp =
@@ -198,6 +279,11 @@ module State =
                         false, internalState
 
                 interp (AbstractMarriage.handleMerry2Confirmation isAgree userId internalState) state
+
+        | RequestMarriedCouples r ->
+            r.Reply state.MarriedCouples
+
+            state
 
     let create db =
         let m =
@@ -333,6 +419,23 @@ module State =
                         m.Post(RequestSlashCommand(e, GetMarried targetId))
                 |}
 
+            let getMarriedList =
+                let slashCommandName = "get-married-list"
+                InteractionCommand.SlashCommand {|
+                    CommandName = slashCommandName
+                    Command =
+                        new Entities.DiscordApplicationCommand(
+                            slashCommandName,
+                            "Список парочек",
+                            ``type`` = ApplicationCommandType.SlashCommand,
+                            name_localizations = Map [
+                                "ru", "список-парочек"
+                            ]
+                        )
+                    Handler = fun e ->
+                        m.Post(RequestSlashCommand(e, GetMarriedList))
+                |}
+
             let getMarriedMenu =
                 let commandName = "get-married"
                 InteractionCommand.CommandMenu {|
@@ -443,6 +546,7 @@ module State =
                 marry
                 getMarried
                 getMarriedMenu
+                getMarriedList
                 divorce
                 statusSlash
                 statusMenu
@@ -483,6 +587,14 @@ module State =
                         restartComponent
                         (fun viewAction -> RequestInteraction(client, e, viewAction) |> m.Post)
                         input
+
+                let isHandled =
+                    if isHandled then isHandled
+                    else
+                        MarriedList.componentInteractionCreateHandle
+                            client
+                            e
+                            (fun () -> m.PostAndReply RequestMarriedCouples)
 
                 return isHandled
             }
