@@ -1,9 +1,9 @@
 namespace Marriage.MarriedCouplesStorage
 open FsharpMyExtension
-open Types
 open MongoDB.Driver
 open MongoDB.Bson
-open Db
+open DiscordBotExtensions.Types
+open DiscordBotExtensions.Db
 
 type MainData =
     {

@@ -3,9 +3,10 @@ open FsharpMyExtension
 open FsharpMyExtension.Either
 open Microsoft.Extensions.Logging
 open System.Threading.Tasks
-
-open Types
-open Extensions
+open DiscordBotExtensions
+open DiscordBotExtensions.Types
+open DiscordBotExtensions.Extensions
+open DiscordBotExtensions.EnvironmentExt
 
 let botEventId = new EventId(42, "Bot-Event")
 
@@ -114,7 +115,7 @@ let main argv =
         )
 
     botModules
-    |> Shared.BotModule.bindToClientsEvents
+    |> BotModule.bindToClientsEvents
         prefix
         (fun client e ->
             let commands =

@@ -2,9 +2,10 @@ namespace Marriage.Main
 open DSharpPlus
 open FsharpMyExtension
 open FsharpMyExtension.Either
+open DiscordBotExtensions
+open DiscordBotExtensions.Types
+open DiscordBotExtensions.Extensions
 
-open Types
-open Extensions
 open Marriage
 open Marriage.Views
 
@@ -21,20 +22,12 @@ type ViewAction =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 [<RequireQualifiedAccess>]
 module ViewActions =
-    let actions =
-        let inline f handlers act componentId str =
-            let componentId = enum componentId
-            match Map.tryFind componentId handlers with
-            | Some parse ->
-                parse str
-            | None ->
-                sprintf "Not found '%A' ComponentId" componentId
-                |> Error
-            |> Result.map act
+    open DiscordBotExtensions.Extensions.Interaction
 
+    let actions : Interaction.Forms<_> =
         [
-            MerryConformationView.viewId, f MerryConformationView.handlers ConformationViewAction
-            MerryConformation2View.viewId, f MerryConformation2View.handlers ConformationView2Action
+            Form.map ViewAction.ConformationViewAction MerryConformationView.handler
+            Form.map ViewAction.ConformationView2Action MerryConformation2View.handler
         ]
         |> Map.ofList
 
@@ -487,14 +480,14 @@ module State =
                 let isHandled =
                     Interaction.handleForms
                         ViewActions.actions
-                        (fun viewAction -> RequestInteraction(client, e, viewAction) |> m.Post)
                         restartComponent
+                        (fun viewAction -> RequestInteraction(client, e, viewAction) |> m.Post)
                         input
 
                 return isHandled
             }
 
-        { Shared.BotModule.empty with
+        { BotModule.empty with
             InteractionCommands =
                 Some commands
 

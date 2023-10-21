@@ -1,6 +1,6 @@
 namespace Marriage.Model
 open FsharpMyExtension
-open Types
+open DiscordBotExtensions.Types
 
 type Req<'Arg, 'Res, 'Next> = 'Arg * ('Res -> 'Next)
 
@@ -42,8 +42,8 @@ module MerryConformationState =
         open FsharpMyExtension.ShowList
 
         let showT (p: MerryConformationState) =
-            shows p.SourceUserId << nl
-            << shows p.TargetUserId
+            showByToString p.SourceUserId << nl
+            << showByToString p.TargetUserId
 
     module Parser =
         open FParsec
@@ -89,7 +89,7 @@ module MerryConformation2Status =
             | MerryConformation2Status.Unknown -> 0
             | MerryConformation2Status.Agree -> 1
             | MerryConformation2Status.Disagree -> 2
-            |> shows
+            |> showByToString
 
     let serialize (status: MerryConformation2Status) =
         Printer.showT status |> FsharpMyExtension.ShowList.show
@@ -135,7 +135,7 @@ module MerryConformation2State =
         open FsharpMyExtension.ShowList
 
         let showT (p: MerryConformation2State) =
-            let showUser (userId: UserId) = shows userId
+            let showUser (userId: UserId) = showByToString userId
             let showUserIdState (userId, status) =
                 showUser userId << showSpace << MerryConformation2Status.Printer.showT status
 

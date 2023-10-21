@@ -11,8 +11,17 @@ nuget Giraffe == 4.1
 
 source https://gitlab.com/api/v4/projects/28574921/packages/nuget/index.json
 storage: none
-nuget FSharpMyExt
+nuget FSharpMyExt prerelease
 nuget DiscordBotExtensions
+
+group Tests
+    strategy: min
+    storage: none
+    source https://api.nuget.org/v3/index.json
+    framework: netcoreapp3.1
+
+    nuget FSharp.Core = 5.0.2
+    nuget Fuchu
 
 group Build
     source https://api.nuget.org/v3/index.json
