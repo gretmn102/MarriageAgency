@@ -1,9 +1,7 @@
-module Marriage.Views
+namespace Marriage.Views
 open DSharpPlus
 open FsharpMyExtension
-
-open Extensions.Interaction
-open Types
+open DiscordBotExtensions.Extensions.Interaction
 
 module MerryResultView =
     let view str =
@@ -12,7 +10,7 @@ module MerryResultView =
         b
 
 module MerryConformationView =
-    open Model
+    open Marriage.Model
 
     let viewId = "merryConformationId"
 
@@ -24,21 +22,21 @@ module MerryConformationView =
         | ConfirmMerry of MerryConformationState
         | CancelMerry of MerryConformationState
 
-    let handlers: Map<ComponentId, string -> Result<Action, string>> =
-        let f deserialize handle str =
-            match deserialize str with
-            | Ok x ->
-                Ok (handle x)
+    let handler: FormId * ComponentStateParsers<Action> =
+        let handlers: ComponentStateParsers<Action> =
+            let parse parseState map =
+                let parseState (pos, str: string) =
+                    parseState str.[pos..]
 
-            | Error(errorValue) ->
-                sprintf "Views.MerryConformationView\n%s" errorValue
-                |> Error
+                ComponentStateParser.parseMap viewId parseState map
 
-        [
-            ComponentId.ConfirmButton, f MerryConformationState.deserialize ConfirmMerry
-            ComponentId.CancelButton, f MerryConformationState.deserialize CancelMerry
-        ]
-        |> Map.ofList
+            [
+                int ComponentId.ConfirmButton, parse MerryConformationState.deserialize ConfirmMerry
+                int ComponentId.CancelButton, parse MerryConformationState.deserialize CancelMerry
+            ]
+            |> Map.ofList
+
+        viewId, handlers
 
     let conformationView (internalState: MerryConformationState) =
         let {
@@ -85,7 +83,7 @@ module MerryConformationView =
         b
 
 module MerryConformation2View =
-    open Model
+    open Marriage.Model
 
     let viewId = "merryConformation2Id"
 
@@ -97,21 +95,21 @@ module MerryConformation2View =
         | ConfirmButton = 0
         | CancelButton = 1
 
-    let handlers: Map<ComponentId, string -> Result<Action, string>> =
-        let f deserialize handle str =
-            match deserialize str with
-            | Ok x ->
-                Ok (handle x)
+    let handler: FormId * ComponentStateParsers<Action> =
+        let handlers: ComponentStateParsers<Action> =
+            let parse parseState map =
+                let parseState (pos, str: string) =
+                    parseState str.[pos..]
 
-            | Error(errorValue) ->
-                sprintf "Views.MerryConformation2View\n%s" errorValue
-                |> Error
+                ComponentStateParser.parseMap viewId parseState map
 
-        [
-            ComponentId.ConfirmButton, f MerryConformation2State.deserialize ConfirmMerry
-            ComponentId.CancelButton, f MerryConformation2State.deserialize CancelMerry
-        ]
-        |> Map.ofList
+            [
+                int ComponentId.ConfirmButton, parse MerryConformation2State.deserialize ConfirmMerry
+                int ComponentId.CancelButton, parse MerryConformation2State.deserialize CancelMerry
+            ]
+            |> Map.ofList
+
+        viewId, handlers
 
     let create ({ MatchmakerId = matchmakerId; User1Status = user1Id, user1Status; User2Status = user2Id, user2Status } as state : MerryConformation2State) =
         let b = Entities.DiscordMessageBuilder()

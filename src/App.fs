@@ -3,15 +3,16 @@ open FsharpMyExtension
 open FsharpMyExtension.Either
 open Microsoft.Extensions.Logging
 open System.Threading.Tasks
-
-open Types
-open Extensions
+open DiscordBotExtensions
+open DiscordBotExtensions.Types
+open DiscordBotExtensions.Extensions
+open DiscordBotExtensions.EnvironmentExt
 
 let botEventId = new EventId(42, "Bot-Event")
 
 let initBotModules (db: MongoDB.Driver.IMongoDatabase) =
     [|
-        Marriage.Main.create db
+        Marriage.Main.State.create db
     |]
 
 open MongoDB.Driver
@@ -114,7 +115,7 @@ let main argv =
         )
 
     botModules
-    |> Shared.BotModule.bindToClientsEvents
+    |> BotModule.bindToClientsEvents
         prefix
         (fun client e ->
             let commands =
@@ -182,7 +183,10 @@ let main argv =
 
     awaiti <| client.ConnectAsync()
 
-    // awaiti <| Task.Delay -1
-    startServer ()
+    match argv with
+    | [| "--server" |] ->
+        startServer ()
+    | _ ->
+        awaiti <| Task.Delay -1
 
     0

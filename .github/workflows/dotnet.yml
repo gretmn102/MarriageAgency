@@ -23,6 +23,9 @@ jobs:
       - name: Build
         run: dotnet fake build -t Deploy
       - name: Test
+        env:
+          DbConnection: ${{ secrets.DB_CONNECTION }}
+          DataBaseName: ${{ secrets.DB_NAME }}
         run: dotnet fake build -t RunTests
       - uses: actions/upload-artifact@v3
         with:
